@@ -1,0 +1,199 @@
+# BEGIN LSCACHE
+## LITESPEED WP CACHE PLUGIN - Do not edit the contents of this block! ##
+<IfModule mod_rewrite.c>
+RewriteEngine on
+RewriteRule litespeed/debug/.*\.log$ - [F,L]
+RewriteRule \.litespeed_conf\.dat - [F,L]
+</IfModule>
+<IfModule LiteSpeed>
+CacheLookup on
+RewriteRule .* - [E=Cache-Control:no-autoflush]
+
+### marker ASYNC start ###
+RewriteCond %{REQUEST_URI} /wp-admin/admin-ajax\.php
+RewriteCond %{QUERY_STRING} action=async_litespeed
+RewriteRule .* - [E=noabort:1]
+### marker ASYNC end ###
+
+### marker MOBILE start ###
+RewriteCond %{HTTP_USER_AGENT} Mobile|Android|Silk/|Kindle|BlackBerry|Opera\ Mini|Opera\ Mobi [NC]
+RewriteRule .* - [E=Cache-Control:vary=%{ENV:LSCACHE_VARY_VALUE}+ismobile]
+### marker MOBILE end ###
+
+### marker WEBP start ###
+RewriteCond %{HTTP_ACCEPT} image/webp [OR]
+RewriteCond %{HTTP_USER_AGENT} iPhone\ OS\ (1[4-9]|[2-9][0-9]) [OR]
+RewriteCond %{HTTP_USER_AGENT} Macintosh.*Version/((1[7-9]|[2-9][0-9])|16\.([4-9]|[1-9][0-9])) [OR]
+RewriteCond %{HTTP_USER_AGENT} Firefox/([6-9][0-9]|[1-9][0-9]{2,})
+RewriteRule .* - [E=Cache-Control:vary=%{ENV:LSCACHE_VARY_VALUE}+webp]
+### marker WEBP end ###
+
+### marker DROPQS start ###
+CacheKeyModify -qs:fbclid
+CacheKeyModify -qs:gclid
+CacheKeyModify -qs:utm*
+CacheKeyModify -qs:_ga
+### marker DROPQS end ###
+
+</IfModule>
+## LITESPEED WP CACHE PLUGIN - Do not edit the contents of this block! ##
+# END LSCACHE
+# BEGIN NON_LSCACHE
+## LITESPEED WP CACHE PLUGIN - Do not edit the contents of this block! ##
+### marker BROWSER CACHE start ###
+<IfModule mod_expires.c>
+ExpiresActive on
+ExpiresByType application/pdf A31557600
+ExpiresByType image/x-icon A31557600
+ExpiresByType image/vnd.microsoft.icon A31557600
+ExpiresByType image/svg+xml A31557600
+
+ExpiresByType image/jpg A31557600
+ExpiresByType image/jpeg A31557600
+ExpiresByType image/png A31557600
+ExpiresByType image/gif A31557600
+ExpiresByType image/webp A31557600
+ExpiresByType image/avif A31557600
+
+ExpiresByType video/ogg A31557600
+ExpiresByType audio/ogg A31557600
+ExpiresByType video/mp4 A31557600
+ExpiresByType video/webm A31557600
+
+ExpiresByType text/css A31557600
+ExpiresByType text/javascript A31557600
+ExpiresByType application/javascript A31557600
+ExpiresByType application/x-javascript A31557600
+
+ExpiresByType application/x-font-ttf A31557600
+ExpiresByType application/x-font-woff A31557600
+ExpiresByType application/font-woff A31557600
+ExpiresByType application/font-woff2 A31557600
+ExpiresByType application/vnd.ms-fontobject A31557600
+ExpiresByType font/ttf A31557600
+ExpiresByType font/otf A31557600
+ExpiresByType font/woff A31557600
+ExpiresByType font/woff2 A31557600
+
+</IfModule>
+### marker BROWSER CACHE end ###
+
+## LITESPEED WP CACHE PLUGIN - Do not edit the contents of this block! ##
+# END NON_LSCACHE
+# =========================================================
+# LITESPEED CACHE - PAGE CACHE + RULE
+# =========================================================
+<IfModule LiteSpeed>
+RewriteEngine On
+
+# -------------------------
+# KHÔNG CACHE TRANG QUAN TRỌNG
+# -------------------------
+RewriteCond %{REQUEST_URI} ^/wp-admin [NC,OR]
+RewriteCond %{REQUEST_URI} ^/wp-login\.php$ [NC,OR]
+RewriteCond %{REQUEST_URI} ^/wp-json [NC,OR]
+RewriteCond %{REQUEST_URI} ^/api [NC]
+RewriteRule .* - [E=Cache-Control:no-cache]
+
+# Không cache search
+RewriteCond %{QUERY_STRING} (^|&)s= [NC]
+RewriteRule .* - [E=Cache-Control:no-cache]
+
+# -------------------------
+# CACHE HTML (PAGE CACHE)
+# -------------------------
+RewriteCond %{REQUEST_METHOD} GET
+RewriteCond %{QUERY_STRING} ^$
+RewriteRule .* - [E=Cache-Control:max-age=3600]
+
+# Googlebot cache lâu hơn (SEO)
+RewriteCond %{HTTP_USER_AGENT} googlebot [NC]
+RewriteRule .* - [E=Cache-Control:max-age=86400]
+
+</IfModule>
+
+# =========================================================
+# BROWSER CACHE (ẢNH + CSS + JS + TEXT)
+# =========================================================
+<IfModule mod_expires.c>
+ExpiresActive On
+
+# -------- STATIC (1 NĂM) --------
+ExpiresByType image/webp A31536000
+ExpiresByType image/avif A31536000
+ExpiresByType image/jpeg A31536000
+ExpiresByType image/png A31536000
+ExpiresByType image/gif A31536000
+ExpiresByType image/svg+xml A31536000
+
+ExpiresByType text/css A31536000
+ExpiresByType application/javascript A31536000
+ExpiresByType application/font-woff2 A31536000
+ExpiresByType font/woff2 A31536000
+
+# -------- TEXT / HTML / JSON (1 TUẦN) --------
+ExpiresByType text/html A604800
+ExpiresByType application/json A604800
+ExpiresByType text/plain A604800
+ExpiresByType application/xml A604800
+
+# Default
+ExpiresDefault A604800
+</IfModule>
+
+# =========================================================
+# CACHE CONTROL HEADER (QUAN TRỌNG)
+# =========================================================
+<IfModule mod_headers.c>
+
+# Static files (cache mạnh)
+<FilesMatch "\.(jpg|jpeg|png|gif|webp|avif|css|js|woff2|svg)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+</FilesMatch>
+
+# HTML
+<FilesMatch "\.(html|htm)$">
+    Header set Cache-Control "public, max-age=3600"
+</FilesMatch>
+
+# JSON
+<FilesMatch "\.(json)$">
+    Header set Cache-Control "public, max-age=3600"
+</FilesMatch>
+
+# SECURITY HTTPS
+Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+</IfModule>
+
+# =========================================================
+# WORDPRESS CORE (GIỮ NGUYÊN - KHÔNG SỬA)
+# =========================================================
+# BEGIN WordPress
+# Các nội dung nằm giữa "BEGIN WordPress" và "END WordPress" được tạo ra tự động, và chỉ nên được thay đổi thông qua các filter của WordPress. Mọi thay đổi tới thành phần này có thể sẽ bị mất và ghi đè.
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+Redirect 301 /product/ee-sx676-2/ https://haiphongtech.vn/product/ee-sx676/
+RewriteRule . /index.php [L]
+</IfModule>
+
+# END WordPress
+
+# =========================================================
+# PHP VERSION (CPANEL)
+# =========================================================
+<IfModule mime_module>
+  AddHandler application/x-httpd-ea-php82 .php .php8 .phtml
+</IfModule>
+
+# php -- BEGIN cPanel-generated handler, do not edit
+# Set the “ea-php82” package as the default “PHP” programming language.
+<IfModule mime_module>
+  AddHandler application/x-httpd-ea-php82 .php .php8 .phtml
+</IfModule>
+# php -- END cPanel-generated handler, do not edit

@@ -1,0 +1,93 @@
+[2026-07-04 02:47:17] Dòng 1: Nhận row_data=["4","\"+ \"&lt","\"+ \"&gt","\"+ \"&#187;","\"+ \""] | ID=4 (int=4) | Tên="+ "&lt | MãNV="+ "&gt | Lớp="+ "&#187; | Ngành="+ "
+-> Khớp ID: {"id":"4","user_name":"\"+ \"&lt","emp_code":"\"+ \"&gt","class_code":"\"+ \"&#187;","team":"\"+ \"","created_at":"2026-07-03 16:28:35"} | Khớp Code: {"id":"4","user_name":"\"+ \"&lt","emp_code":"\"+ \"&gt","class_code":"\"+ \"&#187;","team":"\"+ \"","created_at":"2026-07-03 16:28:35"}
+-> Bỏ qua do không thay đổi
+[2026-07-04 02:47:17] Dòng 2: Nhận row_data=["1","Nguyễn Minh Đức","HPT036","HPT","Công nghệ thông tin (IT)"] | ID=1 (int=1) | Tên=Nguyễn Minh Đức | MãNV=HPT036 | Lớp=HPT | Ngành=Công nghệ thông tin (IT)
+-> Khớp ID: {"id":"1","user_name":"Nguyễn Thu Phương","emp_code":"HPT036","class_code":"HPT","team":"Quản trị kinh doanh","created_at":"2026-07-03 14:31:31"} | Khớp Code: {"id":"1","user_name":"Nguyễn Thu Phương","emp_code":"HPT036","class_code":"HPT","team":"Quản trị kinh doanh","created_at":"2026-07-03 14:31:31"}
+-> CẬP NHẬT theo ID = 1
+[2026-07-04 02:47:17] Dòng 3: Nhận row_data=["","Nguyễn Thu Phương","HPT036","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=Nguyễn Thu Phương | MãNV=HPT036 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: {"id":"1","user_name":"Nguyễn Minh Đức","emp_code":"HPT036","class_code":"HPT","team":"Công nghệ thông tin (IT)","created_at":"2026-07-03 14:31:31"}
+-> CẬP NHẬT theo Code = HPT036 (ID=1)
+[2026-07-04 02:47:49] Dòng 1: Nhận row_data=["4","\"+ \"&lt","\"+ \"&gt","\"+ \"&#187;","\"+ \""] | ID=4 (int=4) | Tên="+ "&lt | MãNV="+ "&gt | Lớp="+ "&#187; | Ngành="+ "
+-> Khớp ID: {"id":"4","user_name":"\"+ \"&lt","emp_code":"\"+ \"&gt","class_code":"\"+ \"&#187;","team":"\"+ \"","created_at":"2026-07-03 16:28:35"} | Khớp Code: {"id":"4","user_name":"\"+ \"&lt","emp_code":"\"+ \"&gt","class_code":"\"+ \"&#187;","team":"\"+ \"","created_at":"2026-07-03 16:28:35"}
+-> Bỏ qua do không thay đổi
+[2026-07-04 02:47:49] Dòng 2: Nhận row_data=["1","Nguyễn Minh Đức","HPT036","HPT","Công nghệ thông tin (IT)"] | ID=1 (int=1) | Tên=Nguyễn Minh Đức | MãNV=HPT036 | Lớp=HPT | Ngành=Công nghệ thông tin (IT)
+-> Khớp ID: {"id":"1","user_name":"Nguyễn Thu Phương","emp_code":"HPT036","class_code":"HPT","team":"Quản trị kinh doanh","created_at":"2026-07-03 14:31:31"} | Khớp Code: {"id":"1","user_name":"Nguyễn Thu Phương","emp_code":"HPT036","class_code":"HPT","team":"Quản trị kinh doanh","created_at":"2026-07-03 14:31:31"}
+-> CẬP NHẬT theo ID = 1
+[2026-07-04 02:47:49] Dòng 3: Nhận row_data=["","Nguyễn Thu Phương","HPT037","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=Nguyễn Thu Phương | MãNV=HPT037 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 1: Nhận row_data=["4","Nguyễn Minh Đức","HPT012","HPT","Quản trị kinh doanh"] | ID=4 (int=4) | Tên=Nguyễn Minh Đức | MãNV=HPT012 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: {"id":"4","user_name":"Nguyễn Minh Đức","emp_code":"HPT036","class_code":"HPT","team":"Quản trị kinh doanh","created_at":"2026-08-13 16:01:12"} | Khớp Code: NULL
+-> CẬP NHẬT theo ID = 4
+[2026-08-18 07:11:03] Dòng 2: Nhận row_data=["5","Đỗ Đức Hiếu","HPT037","HPT","Quản trị kinh doanh"] | ID=5 (int=5) | Tên=Đỗ Đức Hiếu | MãNV=HPT037 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: {"id":"5","user_name":"Đỗ Đức Hiếu","emp_code":"HPT037","class_code":"HPT","team":"Tài chính - Ngân hàng","created_at":"2026-08-15 08:59:45"} | Khớp Code: {"id":"5","user_name":"Đỗ Đức Hiếu","emp_code":"HPT037","class_code":"HPT","team":"Tài chính - Ngân hàng","created_at":"2026-08-15 08:59:45"}
+-> CẬP NHẬT theo ID = 5
+[2026-08-18 07:11:03] Dòng 3: Nhận row_data=["","NGUYỄN THỊ THU PHƯƠNG","HPT002","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=NGUYỄN THỊ THU PHƯƠNG | MãNV=HPT002 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 4: Nhận row_data=["","ĐẶNG THỊ LAN ANH","HPT003","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=ĐẶNG THỊ LAN ANH | MãNV=HPT003 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 5: Nhận row_data=["","ĐỒNG THỊ HẰNG NGA","HPT020","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=ĐỒNG THỊ HẰNG NGA | MãNV=HPT020 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 6: Nhận row_data=["","PHẠM THỊ PHƯỢNG ANH","HPT008","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=PHẠM THỊ PHƯỢNG ANH | MãNV=HPT008 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 7: Nhận row_data=["","LÊ THỊ THU HƯỜNG","HPT009","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=LÊ THỊ THU HƯỜNG | MãNV=HPT009 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 8: Nhận row_data=["","VŨ HƯƠNG GIANG","HPT021","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=VŨ HƯƠNG GIANG | MãNV=HPT021 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 9: Nhận row_data=["","NGUYỄN THỊ THANH THẢO","HPT022","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=NGUYỄN THỊ THANH THẢO | MãNV=HPT022 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 10: Nhận row_data=["","ĐOÀN THỊ THU PHƯƠNG","HPT019","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=ĐOÀN THỊ THU PHƯƠNG | MãNV=HPT019 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 11: Nhận row_data=["","ĐẶNG TRỌNG HÙNG","HPT006","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=ĐẶNG TRỌNG HÙNG | MãNV=HPT006 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 12: Nhận row_data=["","NGUYỄN DUY ĐỨC","HPT011","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=NGUYỄN DUY ĐỨC | MãNV=HPT011 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 13: Nhận row_data=["","NGUYỄN ĐẮC KHA","HPT014","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=NGUYỄN ĐẮC KHA | MãNV=HPT014 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 14: Nhận row_data=["","CHU ĐỨC HẢI","HPT017","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=CHU ĐỨC HẢI | MãNV=HPT017 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 15: Nhận row_data=["","BÙI TUẤN ANH","HPT015","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=BÙI TUẤN ANH | MãNV=HPT015 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 16: Nhận row_data=["","NGUYỄN THU HIỀN","HPT026","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=NGUYỄN THU HIỀN | MãNV=HPT026 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 17: Nhận row_data=["","PHẠM MAI CHI","HPT027","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=PHẠM MAI CHI | MãNV=HPT027 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 18: Nhận row_data=["","NGUYỄN VĂN PHONG","HPT028","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=NGUYỄN VĂN PHONG | MãNV=HPT028 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 19: Nhận row_data=["","TRẦN TIỂU PHỤNG","HPT029","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=TRẦN TIỂU PHỤNG | MãNV=HPT029 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 20: Nhận row_data=["","TĂNG THỊ THU HIỀN","HPT030","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=TĂNG THỊ THU HIỀN | MãNV=HPT030 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 21: Nhận row_data=["","ĐÀO PHƯƠNG THẢO","HPT031","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=ĐÀO PHƯƠNG THẢO | MãNV=HPT031 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 22: Nhận row_data=["","NGUYỄN ÁNH NGỌC","HPT032","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=NGUYỄN ÁNH NGỌC | MãNV=HPT032 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 23: Nhận row_data=["","NGUYỄN THỊ HỒNG NHI","HPT033","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=NGUYỄN THỊ HỒNG NHI | MãNV=HPT033 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 24: Nhận row_data=["","ĐỖ THỊ THÙY LINH","HPT034","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=ĐỖ THỊ THÙY LINH | MãNV=HPT034 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công
+[2026-08-18 07:11:03] Dòng 25: Nhận row_data=["","NGUYỄN THỊ HOA","HPT035","HPT","Quản trị kinh doanh"] | ID= (int=0) | Tên=NGUYỄN THỊ HOA | MãNV=HPT035 | Lớp=HPT | Ngành=Quản trị kinh doanh
+-> Khớp ID: NULL | Khớp Code: NULL
+-> TẠO MỚI thành công

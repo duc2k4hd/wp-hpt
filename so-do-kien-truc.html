@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sales Web Architecture – Quotation‑first (Tables from Excel)</title>
+  <style>
+    :root{
+      --bg: #f6f7fb; --panel:#ffffff; --ink:#111827; --muted:#6b7280; --line:#e5e7eb;
+      --brand:#2563eb; --chip:#eef2ff; --chip-text:#3730a3; --shadow-1:0 6px 24px rgba(2,6,23,.08);
+      --radius-lg:16px; --w:100%;
+    }
+    *,*::before,*::after{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(1200px 700px at 15% -10%, #eaf1ff 0, #f6f7fb 55%, #f4f5f9 100%);
+         color:var(--ink);font:500 15px/1.6 Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Noto Sans,sans-serif}
+    h1,h2,h3{margin:0 0 .6rem;line-height:1.2} h1{font-size:30px} h2{font-size:20px} h3{font-size:15px;text-transform:uppercase;letter-spacing:.12em;color:white}
+    .shell{max-width:var(--w);margin:0 auto;padding:18px}
+    .hero{background:linear-gradient(180deg,#fff 0%,#fafbff 100%);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow-1);
+          padding:18px 18px 10px;position:sticky;top:0;z-index:5;backdrop-filter:saturate(1.2) blur(6px)}
+    .tabs{display:flex;gap:10px;overflow:auto;padding:10px 2px 6px;scrollbar-width:thin}
+    .tab{white-space:nowrap;padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--chip);color:var(--chip-text);font-weight:600;letter-spacing:.2px;display:inline-flex;align-items:center;gap:8px}
+    .tab::before{content:"/";opacity:.35} .tab--primary{background:#e6f0ff;color:#0b3bda;border-color:#c7dbff}
+    .section{margin-top:14px}
+    .title{display:flex;align-items:center;gap:10px;margin:2px 0 10px}.title .bar{width:8px;height:20px;border-radius:4px;background:var(--brand)}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-1);padding:14px 16px}.card+.card{margin-top:12px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    @media(max-width:1100px){.grid-3{grid-template-columns:1fr}} @media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+    .table-wrap{overflow:auto;border-radius:12px;border:1px solid var(--line)} table{width:100%;border-collapse:separate;border-spacing:0}
+    th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);font-size:14px}
+    thead th{background:#f8fafc;color:#0f172a;position:sticky;top:0;z-index:1} tbody tr:nth-child(odd){background:#fff} tbody tr:nth-child(even){background:#fbfcff} tbody tr:hover{background:#eef6ff}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="hero card">
+      <h1>Web trưng bày sản phẩm (Báo giá + Sản phẩm + Bài viết)</h1>
+      <p class="muted">Các cột/kiểu dữ liệu được suy luận trực tiếp từ file Excel bạn đính kèm.</p>
+      <nav class="tabs" aria-label="Bảng dữ liệu">
+        <a class="tab tab--primary" href="#brands">brands</a>
+        <a class="tab" href="#categories">categories</a>
+        <a class="tab" href="#products">products</a>
+        <a class="tab" href="#product_images">product_images</a>
+        <a class="tab" href="#product_documents">product_documents</a>
+        <a class="tab" href="#tags">tags</a>
+        <a class="tab" href="#product_tags">product_tags</a>
+        <a class="tab" href="#posts">posts</a>
+        <a class="tab" href="#post_categories">post_categories</a>
+        <a class="tab" href="#post_tags">post_tags</a>
+        <a class="tab" href="#settings">settings</a>
+        <a class="tab" href="#media_assets">media_assets</a>
+        <a class="tab" href="#menu_items">menu_items</a>
+        <a class="tab" href="#redirects">redirects</a>
+        <a class="tab" href="#users">users</a>
+        <a class="tab" href="#import_jobs">import_jobs</a>
+        <a class="tab" href="#import_items">import_items</a>
+      </nav>
+    </header>
+
+    <section class="section" id="catalog">
+      <div class="title"><span class="bar"></span><h2>Catalog</h2></div>
+      <div class="grid-2">
+        <article id="products" class="card" aria-labelledby="t-products">
+          <h3 id="t-products">products</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>name</td><td>string</td></tr>
+              <tr><td>slug</td><td>string</td></tr>
+              <tr><td>brand_id</td><td>bigint</td></tr>
+              <tr><td>category_id</td><td>bigint</td></tr>
+              <tr><td>short_description</td><td>string</td></tr>
+              <tr><td>overview_html</td><td>string</td></tr>
+              <tr><td>spec_json</td><td>json</td></tr>
+              <tr><td>main_image_url</td><td>string(url)</td></tr>
+              <tr><td>dimension_image_webp_url</td><td>string(url)</td></tr>
+              <tr><td>price_regular</td><td>decimal</td></tr>
+              <tr><td>stock_qty</td><td>int</td></tr>
+              <tr><td>in_stock</td><td>int</td></tr>
+              <tr><td>status</td><td>string</td></tr>
+              <tr><td>published_at</td><td>timestamp</td></tr>
+              <tr><td>seo_title</td><td>string</td></tr>
+              <tr><td>seo_description</td><td>string</td></tr>
+              <tr><td>seo_keyword</td><td>string</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="brands" class="card" aria-labelledby="t-brands">
+          <h3 id="t-brands">brands</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>name</td><td>string</td></tr>
+              <tr><td>slug</td><td>string</td></tr>
+              <tr><td>logo_url</td><td>string(url)</td></tr>
+              <tr><td>description</td><td>string</td></tr>
+              <tr><td>is_active</td><td>int</td></tr>
+              <tr><td>seo_title</td><td>string</td></tr>
+              <tr><td>seo_description</td><td>string</td></tr>
+              <tr><td>seo_keyword</td><td>string</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="categories" class="card" aria-labelledby="t-categories">
+          <h3 id="t-categories">categories</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>parent_id</td><td>bigint</td></tr>
+              <tr><td>name</td><td>string</td></tr>
+              <tr><td>slug</td><td>string</td></tr>
+              <tr><td>is_active</td><td>int</td></tr>
+              <tr><td>sort_order</td><td>int</td></tr>
+              <tr><td>seo_title</td><td>string</td></tr>
+              <tr><td>seo_description</td><td>string</td></tr>
+              <tr><td>seo_keyword</td><td>string</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="product_images" class="card" aria-labelledby="t-product_images">
+          <h3 id="t-product_images">product_images</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>product_id</td><td>bigint</td></tr>
+              <tr><td>url</td><td>string(url)</td></tr>
+              <tr><td>caption</td><td>string</td></tr>
+              <tr><td>is_main</td><td>int</td></tr>
+              <tr><td>sort_order</td><td>int</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="product_documents" class="card" aria-labelledby="t-product_documents">
+          <h3 id="t-product_documents">product_documents</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>product_id</td><td>bigint</td></tr>
+              <tr><td>type</td><td>string</td></tr>
+              <tr><td>url</td><td>string(url)</td></tr>
+              <tr><td>title</td><td>string</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="tags" class="card" aria-labelledby="t-tags">
+          <h3 id="t-tags">tags</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>name</td><td>string</td></tr>
+              <tr><td>slug</td><td>string</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="product_tags" class="card" aria-labelledby="t-product_tags">
+          <h3 id="t-product_tags">product_tags</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>product_id</td><td>bigint</td></tr>
+              <tr><td>tag_id</td><td>bigint</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="content-section">
+      <div class="title"><span class="bar"></span><h2>Content</h2></div>
+      <div class="grid-3">
+        <article id="posts" class="card" aria-labelledby="t-posts">
+          <h3 id="t-posts">posts</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>title</td><td>string</td></tr>
+              <tr><td>slug</td><td>string</td></tr>
+              <tr><td>excerpt</td><td>string</td></tr>
+              <tr><td>content_html</td><td>string</td></tr>
+              <tr><td>status</td><td>string</td></tr>
+              <tr><td>published_at</td><td>timestamp</td></tr>
+              <tr><td>featured_image_url</td><td>string(url)</td></tr>
+              <tr><td>author_id</td><td>bigint</td></tr>
+              <tr><td>seo_title</td><td>string</td></tr>
+              <tr><td>seo_description</td><td>string</td></tr>
+              <tr><td>seo_keyword</td><td>string</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="post_categories" class="card" aria-labelledby="t-post_categories">
+          <h3 id="t-post_categories">post_categories</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>parent_id</td><td>bigint</td></tr>
+              <tr><td>name</td><td>string</td></tr>
+              <tr><td>slug</td><td>string</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="post_tags" class="card" aria-labelledby="t-post_tags">
+          <h3 id="t-post_tags">post_tags</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>name</td><td>string</td></tr>
+              <tr><td>slug</td><td>string</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="site">
+      <div class="title"><span class="bar"></span><h2>Site Config</h2></div>
+      <div class="grid-3">
+        <article id="settings" class="card" aria-labelledby="t-settings">
+          <h3 id="t-settings">settings</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>key</td><td>string</td></tr>
+              <tr><td>value</td><td>string</td></tr>
+              <tr><td>type</td><td>string</td></tr>
+              <tr><td>group</td><td>string</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="media_assets" class="card" aria-labelledby="t-media_assets">
+          <h3 id="t-media_assets">media_assets</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>url</td><td>string(url)</td></tr>
+              <tr><td>type</td><td>string</td></tr>
+              <tr><td>mime</td><td>string</td></tr>
+              <tr><td>title</td><td>string</td></tr>
+              <tr><td>alt</td><td>string</td></tr>
+              <tr><td>caption</td><td>string</td></tr>
+              <tr><td>width</td><td>int</td></tr>
+              <tr><td>height</td><td>int</td></tr>
+              <tr><td>size_bytes</td><td>int</td></tr>
+              <tr><td>hash</td><td>string</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="menu_items" class="card" aria-labelledby="t-menu_items">
+          <h3 id="t-menu_items">menu_items</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>menu_id</td><td>bigint</td></tr>
+              <tr><td>title</td><td>string</td></tr>
+              <tr><td>url</td><td>string</td></tr>
+              <tr><td>parent_id</td><td>bigint</td></tr>
+              <tr><td>order</td><td>int</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+      </div>
+      <div class="grid-3" style="margin-top:12px">
+        <article id="redirects" class="card" aria-labelledby="t-redirects">
+          <h3 id="t-redirects">redirects</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>from_path</td><td>string</td></tr>
+              <tr><td>to_url</td><td>string</td></tr>
+              <tr><td>status</td><td>string</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="users" class="card" aria-labelledby="t-users">
+          <h3 id="t-users">users</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>name</td><td>string</td></tr>
+              <tr><td>email</td><td>string</td></tr>
+              <tr><td>password_hash</td><td>string</td></tr>
+              <tr><td>role</td><td>string</td></tr>
+              <tr><td>status</td><td>string</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>last_login_ip</td><td>string</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="import">
+      <div class="title"><span class="bar"></span><h2>Import</h2></div>
+      <div class="grid-2">
+        <article id="import_jobs" class="card" aria-labelledby="t-import_jobs">
+          <h3 id="t-import_jobs">import_jobs</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>type</td><td>string</td></tr>
+              <tr><td>status</td><td>string</td></tr>
+              <tr><td>filename</td><td>string</td></tr>
+              <tr><td>counters</td><td>json</td></tr>
+              <tr><td>started_at</td><td>timestamp</td></tr>
+              <tr><td>finished_at</td><td>timestamp</td></tr>
+              <tr><td>created_by</td><td>bigint</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+
+        <article id="import_items" class="card" aria-labelledby="t-import_items">
+          <h3 id="t-import_items">import_items</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>field</th><th>type</th></tr></thead>
+            <tbody>
+              <tr><td>id</td><td>bigint</td></tr>
+              <tr><td>job_id</td><td>bigint</td></tr>
+              <tr><td>row_number</td><td>int</td></tr>
+              <tr><td>data_json</td><td>json</td></tr>
+              <tr><td>status</td><td>string</td></tr>
+              <tr><td>error_message</td><td>string</td></tr>
+              <tr><td>mapped_id</td><td>bigint</td></tr>
+              <tr><td>created_at</td><td>timestamp</td></tr>
+              <tr><td>updated_at</td><td>timestamp</td></tr>
+            </tbody>
+          </table></div>
+        </article>
+      </div>
+    </section>
+<!-- =================== IMPORT GUIDE (UPSERT) =================== -->
+    <section class="section" id="import-guide">
+      <div class="title"><span class="bar"></span><h2>Bulk Import (Excel upsert)</h2></div>
+      <article class="card">
+        <p class="muted">Nhập sản phẩm hàng loạt từ Excel/CSV. Nếu <strong>SKU</strong> hoặc <strong>ID</strong> đã tồn tại → <em>update</em>; nếu chưa có → <em>create</em> theo dữ liệu của hàng.</p>
+        <div class="grid-2">
+          <div>
+            <h3>Quy tắc xác định bản ghi</h3>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Ưu tiên</th><th>Khoá kiểm tra</th><th>Ghi chú</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td><code>id</code></td><td>Nếu có <code>id</code> hợp lệ → cập nhật đúng bản ghi đó.</td></tr>
+                <tr><td>2</td><td><code>sku</code> (nếu có) → map sang <code>slug</code></td><td>Trong DB, trường duy nhất tương ứng là <code>slug</code>. Nếu file có cột <code>sku</code>, hệ thống dùng làm <code>slug</code>.</td></tr>
+                <tr><td>3</td><td><code>slug</code></td><td>Nếu không có <code>sku</code> nhưng có <code>slug</code> → dùng làm khoá.</td></tr>
+                <tr><td>4</td><td>Không có id/sku/slug</td><td>Tạo mới; <code>slug</code> sẽ sinh từ <code>name</code> (kebab-case, unique).</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div>
+            <h3>Các bước xử lý</h3>
+            <ol>
+              <li>Tạo <code>import_jobs</code> (status=<code>queued</code>), ghi file gốc.</li>
+              <li>Đọc từng hàng → chuẩn hoá header (ví dụ: <code>sku</code>/<code>SKU</code>).</li>
+              <li>Xác định khoá theo bảng bên trái; <em>upsert</em> vào <code>products</code>.</li>
+              <li>Ghi <code>import_items</code> cho từng hàng (status: <code>ok</code>/<code>error</code>, <code>mapped_id</code>).</li>
+              <li>Cập nhật counters + trạng thái job (<code>running</code> → <code>finished</code>).</li>
+            </ol>
+          </div>
+        </div>
+        <h3 style="margin-top:10px">Pseudocode</h3>
+        <pre>// Input: rows from Excel (XLSX/CSV)
+for row in rows:
+  keyId   = row.id?.trim()
+  keySku  = row.sku?.trim()
+  keySlug = row.slug?.trim() or slugify(row.name)
+
+  // 1) Resolve target record
+  if keyId and exists(Product[id=keyId]): target = Product[id=keyId]
+  else if keySku and exists(Product[slug=keySku]): target = Product[slug=keySku]
+  else if keySlug and exists(Product[slug=keySlug]): target = Product[slug=keySlug]
+  else target = new Product()
+
+  // 2) Map fields allowed theo schema products
+  target.name = row.name
+  target.slug = keySku or keySlug
+  target.brand_id = row.brand_id
+  target.category_id = row.category_id
+  target.short_description = row.short_description
+  target.overview_html = row.overview_html
+  target.spec_json = parseJSON(row.spec_json)
+  target.main_image_url = row.main_image_url
+  target.dimension_image_webp_url = row.dimension_image_webp_url
+  target.price_regular = toDecimal(row.price_regular)
+  target.stock_qty = toInt(row.stock_qty)
+  target.in_stock = toBool(row.in_stock)
+  target.status = row.status
+  target.published_at = toTimestamp(row.published_at)
+  target.seo_title = row.seo_title
+  target.seo_description = row.seo_description
+  target.seo_keyword = row.seo_keyword
+
+  save(target)
+  writeImportItem(job_id, row_no, status="ok", mapped_id=target.id)
+catch (e):
+  writeImportItem(job_id, row_no, status="error", error_message=e.message)
+</pre>
+        <div class="callout" style="margin-top:10px">
+          <strong>Validation gợi ý:</strong> bắt buộc <code>name</code>; <code>slug</code> duy nhất; <code>brand_id</code>/<code>category_id</code> phải tồn tại; URL đúng định dạng; <code>spec_json</code> hợp lệ. Cho phép "partial update": cột nào trống thì bỏ qua (không ghi đè).
+        </div>
+      </article>
+    </section>
+
+    <!-- =================== API – PRODUCTS CRUD =================== -->
+    <section class="section" id="api-products">
+      <div class="title"><span class="bar"></span><h2>API – Products CRUD (JSON, remote)</h2></div>
+      <article class="card">
+        <p class="muted">Cung cấp API REST để tạo/đọc/sửa/xoá sản phẩm từ xa bằng JSON. Xác thực Bearer token, hỗ trợ idempotency với header <code>Idempotency-Key</code>.</p>
+        <div class="grid-2">
+          <div>
+            <h3>Endpoints</h3>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Method</th><th>Path</th><th>Mô tả</th></tr></thead>
+              <tbody>
+                <tr><td>GET</td><td><code>/api/v1/products</code></td><td>List + phân trang (<code>page, per_page, q, brand_id, category_id, status</code>)</td></tr>
+                <tr><td>POST</td><td><code>/api/v1/products</code></td><td>Tạo mới (body JSON theo schema)</td></tr>
+                <tr><td>GET</td><td><code>/api/v1/products/:id_or_slug</code></td><td>Chi tiết theo <code>id</code> hoặc <code>slug</code></td></tr>
+                <tr><td>PUT/PATCH</td><td><code>/api/v1/products/:id_or_slug</code></td><td>Cập nhật toàn phần / từng phần</td></tr>
+                <tr><td>DELETE</td><td><code>/api/v1/products/:id_or_slug</code></td><td>Xoá mềm (<code>status=private</code> hoặc <em>hard delete</em> theo cấu hình)</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div>
+            <h3>Auth & headers</h3>
+            <ul>
+              <li><code>Authorization: Bearer &lt;token&gt;</code></li>
+              <li><code>Content-Type: application/json</code></li>
+              <li>Tùy chọn: <code>Idempotency-Key: uuid</code> (POST/PUT an toàn khi retry)</li>
+              <li>Phản hồi có <code>ETag</code> + hỗ trợ <code>If-Match</code> cho cập nhật lạc quan.</li>
+            </ul>
+          </div>
+        </div>
+        <h3 style="margin-top:10px">Schema JSON (trích)</h3>
+        <pre>{
+  "name": "string",                      // required
+  "slug": "string",                      // unique; nếu không có sẽ sinh từ name
+  "brand_id": 1,
+  "category_id": 10,
+  "short_description": "string",
+  "overview_html": "&lt;p&gt;...&lt;/p&gt;",
+  "spec_json": {"key": "value"},
+  "main_image_url": "https://...",
+  "dimension_image_webp_url": "https://...",
+  "price_regular": 123.45,
+  "stock_qty": 5,
+  "in_stock": 1,
+  "status": "publish",                   // publish|draft|private|future
+  "published_at": "2025-01-01T00:00:00Z",
+  "seo_title": "string",
+  "seo_description": "string",
+  "seo_keyword": "string"
+}</pre>
+        <h3>Ví dụ gọi API</h3>
+        <pre>curl -X POST https://yourdomain.com/api/v1/products \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 6f9a7c2e-1a8f-4d86-af20-6a6e7a3e7dd1" \
+  -d '{
+    "name": "Thermo TX100",
+    "slug": "tx100",
+    "brand_id": 2,
+    "category_id": 11,
+    "price_regular": 1999.00,
+    "stock_qty": 3,
+    "in_stock": 1,
+    "status": "publish"
+  }'</pre>
+        <div class="callout" style="margin-top:10px">
+          <strong>Gợi ý triển khai:</strong> Chuẩn hoá response theo JSON:API (<code>{ data, meta, errors }</code>), phân trang kiểu <code>meta: { total, page, per_page }</code>, log <code>audit_logs</code> cho mọi thay đổi, và phát <code>webhook</code> <em>product.updated</em> khi POST/PUT/PATCH/DELETE thành công.
+        </div>
+      </article>
+    </section>
+  </div>
+<style>
+/* ---------- THEME ---------- */
+:root{
+  --bg: #0b1225;
+  --surface: #0f1733;
+  --surface-2: #0c1530;
+  --text: #e8edf7;
+  --muted: #a9b1c6;
+  --border: #223055;
+  --line: #2b3a68;
+  --accent-1: #22d3ee;
+  --accent-2: #6366f1;
+  --accent-3: #10b981;
+  --shadow: 0 12px 32px rgba(0,0,0,.35);
+}
+
+/* Global reset-ish */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  color:var(--text);
+  background:
+    radial-gradient(1200px 800px at 15% -10%, rgba(34,211,238,.07), transparent 50%),
+    radial-gradient(900px 600px at 85% -10%, rgba(99,102,241,.06), transparent 60%),
+    var(--bg);
+  font:500 15px/1.7 Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
+}
+h2,h3{margin:0 0 .6rem; line-height:1.25}
+p{margin:.6rem 0}
+.muted{color:var(--muted)}
+
+/* ---------- SECTION + TITLE ---------- */
+.section{margin:28px auto; max-width:1200px; padding:0 16px}
+.title{
+  display:flex; align-items:center; gap:12px; margin-bottom:12px;
+}
+.title .bar{
+  width:10px; height:28px; border-radius:8px;
+  background: linear-gradient(180deg, var(--accent-1), var(--accent-2) 60%, var(--accent-3));
+  box-shadow: 0 0 0 1px rgba(34,211,238,.25), 0 6px 18px rgba(99,102,241,.35);
+}
+
+/* ---------- CARD ---------- */
+.card{
+  background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01)) , var(--surface);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:16px 18px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+}
+
+/* ---------- GRID ---------- */
+.grid-2{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap:16px;
+}
+@media (max-width: 900px){
+  .grid-2{ grid-template-columns: 1fr; }
+}
+
+/* ---------- TABLES ---------- */
+.table-wrap{
+  border:1px solid var(--border);
+  border-radius:14px;
+  overflow:auto;           /* Enable horizontal scroll if needed */
+  background: var(--surface-2);
+}
+.table-wrap table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  min-width: 640px;        /* Prevent squish on mobile */
+}
+.table-wrap thead th{
+  position: sticky; top: 0; z-index: 1;
+  background: linear-gradient(180deg, #0e1a3a, #0d1837);
+  color:#cfe1ff;
+  text-align:left;
+  font-weight:700;
+  padding:12px 14px;
+  border-bottom:1px solid var(--line);
+  letter-spacing:.02em;
+}
+.table-wrap tbody td{
+  padding:11px 14px;
+  border-bottom:1px solid rgba(255,255,255,.04);
+}
+.table-wrap tbody tr{
+  background: #0f1837;
+}
+.table-wrap tbody tr:nth-child(2n){
+  background: #0e1735;
+}
+.table-wrap code{
+  background: rgba(255,255,255,.06);
+  border:1px solid var(--border);
+  padding:2px 6px; border-radius:6px; color:#93c5fd;
+}
+
+/* ---------- LISTS ---------- */
+ol{counter-reset: c; padding-left:0; margin:.4rem 0}
+ol > li{
+  list-style:none; counter-increment:c; margin:.4rem 0; padding-left:36px; position:relative;
+}
+ol > li::before{
+  content: counter(c);
+  position:absolute; left:0; top:2px;
+  width:26px; height:26px; display:grid; place-items:center;
+  font-weight:700; color:#0b1225;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  border-radius:8px; box-shadow:0 6px 14px rgba(34,211,238,.25);
+}
+
+/* ---------- CODE BLOCKS ---------- */
+pre{
+  background: var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:14px 16px;
+  color:#d6e1ff;
+  overflow:auto;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.02);
+  margin:10px 0 0;
+}
+pre code{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
+
+/* ---------- CALLOUT ---------- */
+.callout{
+  background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02));
+  border:1px solid var(--border);
+  border-left:4px solid var(--accent-2);
+  border-radius:12px;
+  padding:12px 14px;
+  color:#e9edf9;
+}
+
+/* ---------- SMALL UX POLISH ---------- */
+.section a{color:var(--accent-1); text-decoration:none}
+.section a:hover{ text-decoration:underline }
+::selection{ background:rgba(34,211,238,.25) }
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion:no-preference){
+  .title .bar{ animation: glow 2.4s ease-in-out infinite alternate }
+  @keyframes glow{
+    from{ filter: drop-shadow(0 0 0 rgba(34,211,238,.35)) }
+    to  { filter: drop-shadow(0 0 12px rgba(99,102,241,.35)) }
+  }
+}
+
+</style>
+</body>
+</html>

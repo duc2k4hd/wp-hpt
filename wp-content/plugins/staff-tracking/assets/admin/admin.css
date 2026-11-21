@@ -1,0 +1,432 @@
+/* Staff Tracking — Admin Styles
+   Extends WP core admin; minimal overrides only.
+*/
+
+/* ── Layout ────────────────────────────────────────────────────────────────── */
+.st-wrap { max-width: 1400px; }
+
+.st-page-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 23px !important;
+  margin-bottom: 16px !important;
+}
+
+.st-page-title .dashicons {
+  font-size: 26px;
+  color: #2271b1;
+}
+
+/* ── Card ───────────────────────────────────────────────────────────────────── */
+.st-card {
+  background: #fff;
+  border: 1px solid #c3c4c7;
+  border-radius: 4px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+}
+
+.st-card h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  color: #1d2327;
+}
+
+/* ── KPI grid ──────────────────────────────────────────────────────────────── */
+.st-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat( auto-fit, minmax( 180px, 1fr ) );
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.st-kpi-card {
+  background: #fff;
+  border: 1px solid #c3c4c7;
+  border-radius: 6px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 3px solid #2271b1;
+}
+
+.st-kpi-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #787c82;
+}
+
+.st-kpi-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1d2327;
+  line-height: 1;
+}
+
+/* ── Top tables row ─────────────────────────────────────────────────────────── */
+.st-top-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+@media ( max-width: 782px ) {
+  .st-top-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Date filter ─────────────────────────────────────────────────────────────  */
+.st-date-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  background: #f6f7f7;
+  border: 1px solid #c3c4c7;
+  border-radius: 4px;
+}
+
+.st-date-filter .st-date-sep {
+  color: #787c82;
+  font-size: 13px;
+}
+
+.st-date-filter input[type="date"] {
+  padding: 5px 8px;
+  border: 1px solid #c3c4c7;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.st-preset.active {
+  background: #2271b1 !important;
+  border-color: #135e96 !important;
+  color: #fff !important;
+}
+
+/* ── Filters row ─────────────────────────────────────────────────────────────  */
+.st-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.st-filter-row input.regular-text {
+  height: 30px;
+  font-size: 13px;
+}
+
+.st-filter-row select {
+  height: 30px;
+  font-size: 13px;
+  border: 1px solid #c3c4c7;
+  border-radius: 3px;
+}
+
+/* ── Logs table ──────────────────────────────────────────────────────────────  */
+.st-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+.st-table thead th {
+  background: #f6f7f7;
+  border-bottom: 2px solid #c3c4c7;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+
+.st-table thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.st-table thead th.sortable:hover { background: #ececec; }
+
+.st-table tbody td {
+  padding: 9px 12px;
+  vertical-align: middle;
+  border-bottom: 1px solid #f0f0f1;
+}
+
+.st-cell-time { color: #787c82; white-space: nowrap; font-size: 12px; }
+.st-cell-ip   { font-size: 12px; }
+.st-cell-num  { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── Badges ──────────────────────────────────────────────────────────────────  */
+.st-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.st-badge-ok {
+  background: #edfaef;
+  color: #1a7a2e;
+  border: 1px solid #b0e0b8;
+}
+
+.st-badge-no {
+  background: #fef2f2;
+  color: #b32d2e;
+  border: 1px solid #f5c6c6;
+}
+
+/* ── Loading state ───────────────────────────────────────────────────────────  */
+.st-loading {
+  text-align: center;
+  color: #787c82;
+  font-style: italic;
+  padding: 24px !important;
+}
+
+/* ── Pagination ──────────────────────────────────────────────────────────────  */
+.st-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 0 4px;
+}
+
+.st-pag-info {
+  font-size: 12px;
+  color: #787c82;
+  margin-right: 8px;
+}
+
+.st-pag-btn { min-width: 34px; text-align: center; }
+
+/* ── Export page ─────────────────────────────────────────────────────────────  */
+.st-export-card { max-width: 640px; }
+
+.st-export-filters {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 16px 0 20px;
+}
+
+.st-export-filters label {
+  font-weight: 600;
+  font-size: 13px;
+  color: #3c434a;
+}
+
+.st-export-filters input,
+.st-export-filters select {
+  font-size: 13px;
+  border: 1px solid #c3c4c7;
+  border-radius: 3px;
+  padding: 0 8px;
+}
+
+.st-export-actions { margin-top: 8px; }
+
+/* Khóa cuộn trang khi mở modal */
+body.st-modal-open {
+  overflow: hidden !important;
+}
+
+/* ── Modal CRUD ──────────────────────────────────────────────────────────────── */
+.st-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.st-modal-content {
+  background: #fff;
+  padding: 24px 30px;
+  border-radius: 6px;
+  width: 100%;
+  max-width: 750px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.st-modal-content h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 18px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.st-form-group {
+  margin-bottom: 15px;
+}
+
+.st-form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #3c434a;
+}
+
+.st-form-group input[type="text"],
+.st-form-group input[type="email"],
+.st-form-group textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #8c8f94;
+  border-radius: 4px;
+}
+
+.st-form-group textarea {
+  min-height: 60px;
+}
+
+.st-form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 25px;
+}
+
+.st-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 13px;
+  border-radius: 4px;
+}
+.st-action-btn.edit { color: #2271b1; }
+.st-action-btn.edit:hover { background: #f0f0f1; }
+.st-action-btn.delete { color: #d63638; }
+.st-action-btn.delete:hover { background: #fef2f2; }
+
+/* ── Responsive ─────────────────────────────────────────────────────────────── */
+@media ( max-width: 900px ) {
+  .st-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media ( max-width: 600px ) {
+  .st-kpi-grid { grid-template-columns: 1fr 1fr; }
+  .st-date-filter { flex-direction: column; align-items: flex-start; }
+  .st-filter-row  { flex-direction: column; align-items: flex-start; }
+  .st-export-filters { grid-template-columns: 1fr; }
+}
+
+/* ── Personnel Accordion Detail Sub-table ───────────────────────────────────── */
+.st-detail-container {
+  background: #f6f7f7;
+  border-radius: 4px;
+}
+.st-detail-container table {
+  margin-top: 5px;
+  width: 100%;
+  border-collapse: collapse;
+}
+.st-detail-container th {
+  font-weight: 600 !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+}
+.st-detail-container td {
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  border-bottom: 1px solid #f0f0f1 !important;
+  background: #fff !important;
+}
+.st-detail-container tr:hover td {
+  background: #f9f9f9 !important;
+}
+.st-toggle-cell {
+  user-select: none;
+  font-family: monospace;
+}
+
+/* ── Dashboard Custom Analysis Progress Bars ────────────────────────────────── */
+.st-stat-bar-wrapper {
+  margin-bottom: 12px;
+}
+.st-stat-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #3c434a;
+  margin-bottom: 4px;
+}
+.st-stat-bar-outer {
+  background: #f0f0f1;
+  border-radius: 4px;
+  height: 8px;
+  overflow: hidden;
+  position: relative;
+}
+.st-stat-bar-inner {
+  background: #2271b1;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+.st-stat-bar-inner.device-desktop { background: #2271b1; }
+.st-stat-bar-inner.device-mobile  { background: #10b981; }
+.st-stat-bar-inner.device-tablet  { background: #f59e0b; }
+
+.st-stat-bar-inner.browser-chrome  { background: #2271b1; }
+.st-stat-bar-inner.browser-safari  { background: #ec4899; }
+.st-stat-bar-inner.browser-firefox { background: #f97316; }
+.st-stat-bar-inner.browser-edge    { background: #06b6d4; }
+.st-stat-bar-inner.browser-other   { background: #6b7280; }
+
+.st-stat-bar-inner.hour-morning   { background: #3b82f6; }
+.st-stat-bar-inner.hour-afternoon { background: #f59e0b; }
+.st-stat-bar-inner.hour-evening   { background: #8b5cf6; }
+.st-stat-bar-inner.hour-night     { background: #1e293b; }
+
+@keyframes st-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.dashicons.spin {
+  animation: st-spin 1s linear infinite;
+}
+
+/* SlimSelect override: ensure dropdown overlaps the modal */
+.ss-content {
+  z-index: 1000000 !important;
+}
+
+/* ── Actions Dropdown ───────────────────────────────────────────────────────── */
+.st-dropdown-menu a {
+  display: block !important;
+  padding: 8px 14px !important;
+  text-decoration: none !important;
+  color: #1d2327 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  border-bottom: 1px solid #f0f0f1;
+  transition: background 0.15s;
+  cursor: pointer;
+}
+.st-dropdown-menu a:last-child {
+  border-bottom: none;
+}
+.st-dropdown-menu a:hover {
+  background-color: #f0f0f1 !important;
+}
+.st-dropdown-menu a.st-action-btn.delete {
+  color: #d63638 !important;
+}
+.st-dropdown-menu a.st-action-btn.delete:hover {
+  background-color: #fcf1f1 !important;
+}

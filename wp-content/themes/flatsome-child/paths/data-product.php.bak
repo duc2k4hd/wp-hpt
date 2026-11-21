@@ -1,0 +1,111 @@
+<?php
+add_filter('woocommerce_product_export_column_names', 'add_custom_export_column');
+function add_custom_export_column($columns) {
+    $columns['brand'] = 'Thương hiệu';
+    $columns['logo'] = 'Logo';
+    $columns['linktailieu'] = 'Link tài liệu';
+    $columns['tongquan'] = 'Tổng quan';
+    $columns['tablepress'] = 'Table Press';
+    return $columns;
+}
+
+// Thêm dữ liệu vào cột brand
+add_filter('woocommerce_product_export_product_column_brand', 'export_data_brand', 10, 2);
+function export_data_brand($value, $product) {
+    // $value = $product->get_meta('_custom_meta_key', true);
+    $terms = get_the_terms($product->id,'thuong_hieu'); 
+    $value = array();
+    if (!empty($terms)) {
+        foreach ($terms as $key => $term) {
+            array_push($value,$term->name);
+        }  
+    }
+    $value = implode(",",$value);
+    return $value;
+}
+// Thêm dữ liệu vào cột logo
+add_filter('woocommerce_product_export_product_column_logo', 'export_data_logo', 10, 2);
+function export_data_logo($value, $product) {
+    $logo = get_field('logo',$product->id);
+    $value = array();
+    if (!empty($logo)) {
+        foreach ($logo as $key => $item) {
+            array_push($value,$item);
+        }
+    }
+    $value = implode(",",$value);
+    return $value;
+}
+// Thêm dữ liệu vào cột Link tài liệu
+add_filter('woocommerce_product_export_product_column_linktailieu', 'export_data_linktailieu', 10, 2);
+function export_data_linktailieu($value, $product) {
+    $value = get_field('link_pdf_product',$product->id);
+    if (empty($value)) {
+        $value = '';
+    }
+    return $value;
+}
+// Thêm dữ liệu vào cột tổng quan
+add_filter('woocommerce_product_export_product_column_tongquan', 'export_data_tongquan', 10, 2);
+function export_data_tongquan($value, $product) {
+    $value = get_field('overview',$product->id);
+    if (empty($value)) {
+        $value = '';
+    }
+    return $value;
+}
+// Thêm dữ liệu vào cột Table Press
+add_filter('woocommerce_product_export_product_column_tablepress', 'export_data_tablepress', 10, 2);
+function export_data_tablepress($value, $product) {
+    $value = get_field('table_press',$product->id);
+    if (empty($value)) {
+        $value = '';
+    }
+    return $value;
+}
+// Xử lý import dữ liệu
+add_filter('woocommerce_csv_product_import_mapping_options', 'add_custom_field_mapping_option');
+function add_custom_field_mapping_option($options)
+{
+    // Thêm tùy chọn mới vào "Map to Field"
+    $options['brand'] = __('Thương hiệu', 'text-domain');
+    $options['logo'] = __('Logo', 'text-domain');
+    $options['linktailieu'] = __('Link tài liệu', 'text-domain');
+    $options['tongquan'] = __('Tổng quan', 'text-domain');
+    $options['tablepress'] = __('Table Press', 'text-domain');
+    return $options;
+}
+add_filter('woocommerce_csv_product_import_mapping_default_columns', 'map_custom_field_columns');
+function map_custom_field_columns($columns)
+{
+    $columns['Thương hiệu'] = 'brand';
+    $columns['Logo'] = 'logo';
+    $columns['Link tài liệu'] = 'linktailieu';
+    $columns['Tổng quan'] = 'tongquan';
+    $columns['Table Press'] = 'tablepress';
+    return $columns;
+}
+add_filter('woocommerce_product_import_pre_insert_product_object', 'customize_import_product', 10, 2);
+
+function customize_import_product($product, $data)
+{
+    update_field('link_pdf_product', $data['linktailieu'], $product->id);
+    update_field('overview', $data['tongquan'], $product->id);
+    update_field('table_press', $data['tablepress'], $product->id);
+    update_field('logo', explode(',', $data['logo']), $product->id);
+    // Thương hiệu
+    $term_names = explode(',', $data['brand']);
+    $taxonomy = 'thuong_hieu';
+    foreach ($term_names as $key => $value) {
+        $term = get_term_by('name', $value, $taxonomy);
+        if ($term) {
+            wp_set_object_terms($product->id, $term->term_id, $taxonomy);
+        } else {
+            $new_term = wp_insert_term($value, $taxonomy);
+            if (!is_wp_error($new_term)) {
+                wp_set_object_terms($product->id, $new_term['term_id'], $taxonomy);
+            }
+        }
+    }
+    return $product;
+}

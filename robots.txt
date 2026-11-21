@@ -1,0 +1,39 @@
+# Hai Phong Tech - robots.txt
+#
+# robots.txt controls crawling, not indexing. Public pages and resources that
+# return noindex must stay crawlable so bots can read the meta/header directive.
+
+User-agent: *
+Allow: /
+
+# WordPress administration and private/system endpoints.
+Disallow: /wp-admin/
+Allow: /wp-admin/admin-ajax.php
+Disallow: /wp-login.php
+Disallow: /wp-register.php
+Disallow: /wp-cron.php
+Disallow: /wp-activate.php
+Disallow: /wp-signup.php
+Disallow: /wp-trackback.php
+Disallow: /xmlrpc.php
+Disallow: /wp-json/
+
+# Core PHP/library directories are not public content. Keep front-end assets
+# available where WordPress needs them for rendering.
+Disallow: /wp-includes/
+Allow: /wp-includes/css/
+Allow: /wp-includes/js/
+
+# Cache, deployment and server-only paths.
+Disallow: /wp-content/cache/
+Disallow: /wp-content/upgrade/
+Disallow: /cgi-bin/
+Disallow: /litespeed/
+Disallow: /pagead/
+Disallow: /viewthroughconversion/
+
+# Do not add Disallow rules for /search/, /author/, /tag/, product-tag,
+# feeds, pagination or query parameters. These URLs are intentionally
+# crawlable so WordPress can return noindex, follow to search bots.
+
+Sitemap: https://haiphongtech.vn/sitemap_index.xml

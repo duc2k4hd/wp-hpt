@@ -1,0 +1,143 @@
+
+jQuery(function ($) {
+    $(".ux-relay__load-more-button")
+        .contents()
+        .filter(function () {
+            return this.nodeType === 3; // Node Type 3 is a text node
+        })
+        .each(function () {
+            this.nodeValue = this.nodeValue.replace("Tải thêm", "Xem thêm sản phẩm");
+        });
+    // Thêm biểu tượng dấu cộng
+    $(".ux-relay__load-more-button").append(
+        '<span class="dashicons dashicons-plus-alt2" style="line-height:35px"></span>'
+    );
+    $("#tab-description table").each(function () {
+        let $table = $(this);
+        let colCount = $table.find("tr:first td, tr:first th").length;
+
+        if (colCount > 0) {
+            let colWidth = 100 / colCount + "%";
+            $table.css("table-layout", "fixed");
+            $table.find("td, th").css("width", colWidth);
+        }
+    });
+});
+
+jQuery(function ($) {
+    // Hiện popup khi hover vào avatar
+    $("#user-avatar").hover(
+        function () {
+            $("#user-popup").removeClass("tw-hidden");
+        },
+        function () {
+            $("#user-popup").addClass("tw-hidden");
+        }
+    );
+
+    // Giữ popup khi hover vào popup
+    $("#user-popup").hover(
+        function () {
+            $(this).removeClass("tw-hidden");
+        },
+        function () {
+            $(this).addClass("tw-hidden");
+        }
+    );
+    
+    // Mã mở và đóng modal đăng nhập
+    $("#open-login-modal").on("click", function () {
+        console.log("Đã mở modal");
+        $("#loginModal").removeClass("tw-hidden");
+        $("#modal-content").removeClass("tw-opacity-0").addClass("tw-opacity-100");
+    });
+
+    $("#close-login-modal").on("click", function () {
+        console.log("Đã đóng modal");
+        $("#loginModal").addClass("tw-hidden");
+        $("#modal-content").removeClass("tw-opacity-100").addClass("tw-opacity-0");
+    });
+
+    $("#loginModal").on("click", function (e) {
+        if (
+            $(e.target).is("#loginModal") ||
+            $(e.target).is("#modal-content") ||
+            $(e.target).closest("#modal-content").length === 0
+        ) {
+            console.log("Đã đóng modal bằng cách nhấp bên ngoài");
+            $(this).addClass("tw-hidden");
+            $("#modal-content").removeClass("tw-opacity-100").addClass("tw-opacity-0");
+        }
+    });
+});
+
+jQuery(function ($) {
+    const $overlay = $("#overlay");
+    const $popupContainer = $("#popup-container");
+    const $popupContent = $("#popup-content");
+
+    // Ẩn popup khi nhấn vào nút đóng
+    $("#close-popup").on("click", function () {
+        $popupContainer.add($overlay).fadeOut();
+    });
+
+    $(document).on("click", "#request_quote", function (e) {
+        e.preventDefault();
+
+        $popupContainer.add($overlay).fadeIn();
+
+        if (!$popupContainer.length || !$popupContent.length) {
+            return;
+        }
+
+        if ($popupContainer.attr("data-loaded") === "1" || $popupContainer.attr("data-loading") === "1") {
+            return;
+        }
+
+        const ajaxUrl = $popupContainer.data("ajax-url") || "/wp-admin/admin-ajax.php";
+
+        $popupContainer.attr("data-loading", "1");
+        $popupContent.html("<div class=\"tw-p-8 tw-text-center\">Đang tải biểu mẫu...</div>");
+
+        $.ajax({
+            url: ajaxUrl,
+            type: "POST",
+            dataType: "json",
+            data: {
+                action: "hpt_get_quote_popup_content"
+            }
+        }).done(function (response) {
+            if (response && response.success && response.data && response.data.html) {
+                $popupContent.html(response.data.html);
+                $popupContainer.attr("data-loaded", "1");
+                return;
+            }
+
+            $popupContent.html("<div class=\"tw-p-8 tw-text-center\">Không tải được biểu mẫu báo giá.</div>");
+        }).fail(function () {
+            $popupContent.html("<div class=\"tw-p-8 tw-text-center\">Có lỗi khi tải biểu mẫu báo giá.</div>");
+        }).always(function () {
+            $popupContainer.removeAttr("data-loading");
+        });
+    });
+
+    // Đóng popup khi nhấn vào overlay
+    $overlay.on("click", function () {
+        $popupContainer.add($overlay).fadeOut();
+    });
+});
+
+// Click ẩn hiện nội dung thẻ td
+jQuery(function($) {
+  $('.single-product table:first-of-type tr td').each(function () {
+    const el = this;
+    // Kiểm tra xem nội dung có bị cắt không
+    if (el.scrollHeight > el.clientHeight) {
+      $(el).addClass('clamped');
+    }
+  });
+
+  $('.single-product table:first-of-type tr td').on('click', function () {
+    $(this).toggleClass('expanded');
+  });
+})

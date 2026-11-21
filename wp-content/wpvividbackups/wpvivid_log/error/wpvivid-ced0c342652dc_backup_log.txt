@@ -1,0 +1,175 @@
+Log created: 2025-02-24 09:47:51
+Type: backup
+[2025-02-24 09:47:51][notice]Start backing up.
+[2025-02-24 09:47:51][notice]server info fcgi:Off max execution time: 300 wp version:6.6.2 php version:8.1.31 db version:10.6.18 php ini:safe_mode: memory_limit:512M memory_get_usage:84,26 MB memory_get_peak_usage:85,30 MB extensions:PDO enabled curl enabled zlib enabled   is_multisite:0
+[2025-02-24 09:47:51][notice]LiteSpeed Server.
+[2025-02-24 09:47:51][notice]Add LiteSpeed Rule
+[2025-02-24 09:47:51][notice]Prepare to backup backup_db files.
+[2025-02-24 09:47:51][notice]Start exporting database.
+[2025-02-24 09:47:51][notice]Preparing to dump table wp_wfls_role_counts
+[2025-02-24 09:47:51][notice]Preparing to dump table wp_alm
+[2025-02-24 09:47:51][notice]Preparing to dump table wp_cybersmtps_email_logs
+[2025-02-24 09:47:51][notice]Preparing to dump table wp_easywpsmtp_debug_events
+[2025-02-24 09:47:51][notice]Preparing to dump table wp_easywpsmtp_tasks_meta
+[2025-02-24 09:47:51][notice]Preparing to dump table wp_gla_attribute_mapping_rules
+[2025-02-24 09:47:51][notice]Preparing to dump table wp_gla_merchant_issues
+[2025-02-24 09:47:51][notice]Preparing to dump table wp_uwp_form_extras
+[2025-02-24 09:47:51][notice]Preparing to dump table wp_uwp_form_fields
+[2025-02-24 09:47:51][notice]Preparing to dump table wp_uwp_profile_tabs
+[2025-02-24 09:47:51][notice]Preparing to dump table wp_uwp_user_sorting
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_vi_wbe_history
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_reserved_stock
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfauditevents
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfblockediplog
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfcrawlers
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wffilechanges
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wflocs
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfls_settings
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfnotifications
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfreversecache
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfsecurityevents
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wftrafficrates
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfwaffailures
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_shipping_zone_methods
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_shipping_zones
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wpfm_backup
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wpmailsmtp_debug_events
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wpmailsmtp_tasks_meta
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wt_iew_action_history
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wt_iew_mapping_template
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_actionscheduler_claims
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_actionscheduler_groups
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_duplicator_pro_entities
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_duplicator_pro_packages
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_e_events
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_gla_shipping_times
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_links
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_rank_math_404_logs
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_social_users
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_phrases
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_product_attributes_lookup
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_product_download_directories
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_rate_limits
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_tax_rate_classes
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_webhooks
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfhoover
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wflivetraffichuman
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfls_2fa_secrets
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_attribute_taxonomies
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_log
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_order_items
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_payment_tokens
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_sessions
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_yith_wcwl
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_gla_shipping_rates
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_imagify_folders
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_uwp_social_profiles
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_customer_lookup
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_download_log
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_feedback_forms
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_order_coupon_lookup
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_order_tax_lookup
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_users_rated
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_api_keys
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_order_itemmeta
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_payment_tokenmeta
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_tax_rate_locations
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_yith_wcwl_itemmeta
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_yith_wcwl_lists
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_litespeed_img_optming
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_um_metadata
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_users
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_order_stats
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfblocks7
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfhits
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfsnipcache
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_shipping_zone_locations
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_commentmeta
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_rank_math_analytics_gsc
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_category_lookup
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_comments_subscription
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_order_product_lookup
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfpendingissues
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_downloadable_product_permissions
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_woocommerce_tax_rates
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_yith_wcan_cache
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_imagify_files
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_users_voted
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_comments
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_rank_math_analytics_inspections
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_admin_note_actions
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_admin_notes
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wpr_rucss_used_css
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wc_follow_users
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_wfissues
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_litespeed_url
+[2025-02-24 09:47:52][notice]Preparing to dump table wp_usermeta
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_gla_budget_recommendations
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_wpr_above_the_fold
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_wflogins
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_actionscheduler_logs
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_litespeed_url_file
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_actionscheduler_actions
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_wfconfig
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_rank_math_internal_meta
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_wfstatus
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_rank_math_analytics_objects
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_wpr_rocket_cache
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_rank_math_internal_links
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_wc_product_meta_lookup
+[2025-02-24 09:47:53][notice]Preparing to dump table wp_termmeta
+[2025-02-24 09:47:54][notice]Preparing to dump table wp_term_taxonomy
+[2025-02-24 09:47:55][notice]Preparing to dump table wp_options
+[2025-02-24 09:47:55][notice]Preparing to dump table wp_term_relationships
+[2025-02-24 09:47:57][notice]Preparing to dump table wp_terms
+[2025-02-24 09:47:58][notice]Preparing to dump table wp_wfknownfilelist
+[2025-02-24 09:48:10][notice]Preparing to dump table wp_wffilemods
+[2025-02-24 09:48:26][notice]Preparing to dump table wp_posts
+[2025-02-24 09:48:28][notice]Preparing to dump table wp_postmeta
+[2025-02-24 09:58:21][notice]Exporting database finished.
+[2025-02-24 09:58:21][notice]Start compressing database
+[2025-02-24 09:58:21][notice]Prepare to zip file. file: demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47.part001.sql
+[2025-02-24 09:58:29][notice]Adding zip files completed.demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_db.part001.zip, filesize: 27,43 MB
+[2025-02-24 09:58:29][notice]Prepare to zip file. file: demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47.part002.sql
+[2025-02-24 09:58:34][notice]Adding zip files completed.demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_db.part001.zip, filesize: 55,81 MB
+[2025-02-24 09:58:34][notice]Prepare to zip file. file: demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47.part003.sql
+[2025-02-24 09:58:40][notice]Adding zip files completed.demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_db.part001.zip, filesize: 69,16 MB
+[2025-02-24 09:58:40][notice]Prepare to zip file. file: demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47.part004.sql
+[2025-02-24 09:58:44][notice]Adding zip files completed.demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_db.part001.zip, filesize: 78,47 MB
+[2025-02-24 09:58:44][notice]Compressing database completed
+[2025-02-24 09:58:44][notice]Backing up backup_db completed.
+[2025-02-24 09:58:44][notice]Prepare to backup backup_themes files.
+[2025-02-24 09:58:44][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_themes.part001.zip index:2301
+[2025-02-24 09:58:46][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_themes.part001.zip success. index:2301 file size:23,51 MB
+[2025-02-24 09:58:46][notice]Backing up backup_themes completed.
+[2025-02-24 09:58:46][notice]Prepare to backup backup_plugin files.
+[2025-02-24 09:58:47][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_plugin.part001.zip index:13452
+[2025-02-24 09:59:01][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_plugin.part001.zip success. index:13452 file size:57,20 MB
+[2025-02-24 09:59:02][notice]Backing up backup_plugin completed.
+[2025-02-24 09:59:02][notice]Prepare to backup backup_uploads files.
+[2025-02-24 09:59:08][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part001.zip index:5325
+[2025-02-24 09:59:15][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part001.zip success. index:5325 file size:162,78 MB
+[2025-02-24 09:59:15][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part002.zip index:11126
+[2025-02-24 09:59:22][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part002.zip success. index:11126 file size:178,57 MB
+[2025-02-24 09:59:22][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part003.zip index:17376
+[2025-02-24 09:59:29][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part003.zip success. index:17376 file size:179,90 MB
+[2025-02-24 09:59:29][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part004.zip index:24349
+[2025-02-24 09:59:36][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part004.zip success. index:24349 file size:187,39 MB
+[2025-02-24 09:59:36][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part005.zip index:28780
+[2025-02-24 09:59:43][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part005.zip success. index:28780 file size:184,65 MB
+[2025-02-24 09:59:43][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part006.zip index:33137
+[2025-02-24 09:59:50][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part006.zip success. index:33137 file size:183,63 MB
+[2025-02-24 09:59:51][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part007.zip index:37660
+[2025-02-24 09:59:58][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part007.zip success. index:37660 file size:183,25 MB
+[2025-02-24 09:59:58][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part008.zip index:42008
+[2025-02-24 10:00:05][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part008.zip success. index:42008 file size:183,69 MB
+[2025-02-24 10:00:06][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part009.zip index:46581
+[2025-02-24 10:00:12][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part009.zip success. index:46581 file size:182,57 MB
+[2025-02-24 10:00:13][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part010.zip index:50961
+[2025-02-24 10:00:20][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part010.zip success. index:50961 file size:184,46 MB
+[2025-02-24 10:00:20][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part011.zip index:55493
+[2025-02-24 10:00:27][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part011.zip success. index:55493 file size:183,59 MB
+[2025-02-24 10:00:27][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part012.zip index:59932
+[2025-02-24 10:00:33][notice]Compressing zip file:demo2.haiphongtech.vn_wpvivid-ced0c342652dc_2025-02-24-09-47_backup_uploads.part012.zip success. index:59932 file size:
+[2025-02-24 10:00:33][error]Backup the file ends with an error Failed to add zip files. status string:Write error: Disk quota exceeded
+[2025-02-24 10:00:33][error]Failed to add zip files. status string:Write error: Disk quota exceeded

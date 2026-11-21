@@ -1,0 +1,5 @@
+{
+    "intelephense.environment.includePaths": [
+        "${workspaceFolder}/wp-content/plugins/tablepress/libraries/vendor"
+    ]
+}

@@ -1,0 +1,880 @@
+diff --git a/woocommerce/assets/js/admin/wc-product-export.js b/woocommerce/assets/js/admin/wc-product-export.js
+index 69331654bd80d4cc9ce15601ca617ed4db7fafea..cf30228a2fac2bb91499c777c027abcad110fafd 100644
+--- a/woocommerce/assets/js/admin/wc-product-export.js
++++ b/woocommerce/assets/js/admin/wc-product-export.js
+@@ -5,7 +5,8 @@
+ 	 */
+ 	var productExportForm = function( $form ) {
+ 		this.$form = $form;
+-		this.xhr   = false;
++		this.$error = $( '<div class="notice notice-error inline woocommerce-export-error" role="alert">' ).append( $( '<p>' ) ).hide();
++		this.$error.insertBefore( $form.find( 'section' ).first() );
+ 
+ 		// Initial state.
+ 		this.$form.find('.woocommerce-exporter-progress').val( 0 );
+@@ -24,23 +25,38 @@
+ 	productExportForm.prototype.onSubmit = function( event ) {
+ 		event.preventDefault();
+ 
+-		var currentDate    = new Date(),
++		var exporter       = event.data.productExportForm,
++			currentDate    = new Date(),
+ 			day            = currentDate.getDate(),
+ 			month          = currentDate.getMonth() + 1,
+ 			year           = currentDate.getFullYear(),
+ 			timestamp      = currentDate.getTime(),
+ 			filename       = 'wc-product-export-' + day + '-' + month + '-' + year + '-' + timestamp + '.csv';
+ 
+-		event.data.productExportForm.$form.addClass( 'woocommerce-exporter__exporting' );
+-		event.data.productExportForm.$form.find('.woocommerce-exporter-progress').val( 0 );
+-		event.data.productExportForm.$form.find('.woocommerce-exporter-button').prop( 'disabled', true );
+-		event.data.productExportForm.processStep( 1, $( this ).serialize(), '', filename );
++		if ( exporter.$form.hasClass( 'woocommerce-exporter__exporting' ) ) {
++			return;
++		}
++
++		exporter.$error.hide();
++		exporter.$form.addClass( 'woocommerce-exporter__exporting' );
++		exporter.$form.find( '.woocommerce-exporter-progress' ).val( 0 );
++		exporter.$form.find( '.woocommerce-exporter-button' ).prop( 'disabled', true );
++		exporter.processStep( 1, $( this ).serialize(), '', filename, 'start' );
++	};
++
++	productExportForm.prototype.stop = function( message ) {
++		this.$form.removeClass( 'woocommerce-exporter__exporting' );
++		this.$form.find( '.woocommerce-exporter-button' ).prop( 'disabled', false );
++		if ( message ) {
++			this.$error.find( 'p' ).text( message );
++			this.$error.show();
++		}
+ 	};
+ 
+ 	/**
+ 	 * Process the current export step.
+ 	 */
+-	productExportForm.prototype.processStep = function( step, data, columns, filename ) {
++	productExportForm.prototype.processStep = function( step, data, columns, filename, cursor ) {
+ 		var $this              = this,
+ 			selected_columns   = $( '.woocommerce-exporter-columns' ).val(),
+ 			export_meta        = $( '#woocommerce-exporter-meta:checked' ).length ? 1: 0,
+@@ -51,6 +67,7 @@
+ 		$.ajax( {
+ 			type: 'POST',
+ 			url: ajaxurl,
++			timeout: 90000,
+ 			data: {
+ 				form               : data,
+ 				action             : 'woocommerce_do_ajax_product_export',
+@@ -62,28 +79,43 @@
+ 				export_category    : export_category,
+ 				export_product_ids : export_product_ids,
+ 				filename           : filename,
++				export_cursor      : cursor || '',
+ 				security           : wc_product_export_params.export_nonce
+ 			},
+ 			dataType: 'json',
+ 			success: function( response ) {
+-				if ( response.success ) {
+-					if ( 'done' === response.data.step ) {
+-						$this.$form.find('.woocommerce-exporter-progress').val( response.data.percentage );
+-						window.location = response.data.url;
+-						setTimeout( function() {
+-							$this.$form.removeClass( 'woocommerce-exporter__exporting' );
+-							$this.$form.find('.woocommerce-exporter-button').prop( 'disabled', false );
+-						}, 2000 );
+-					} else {
+-						$this.$form.find('.woocommerce-exporter-progress').val( response.data.percentage );
+-						$this.processStep( parseInt( response.data.step, 10 ), data, response.data.columns, filename );
+-					}
++				if ( ! response || ! response.success || ! response.data ) {
++					$this.stop( response && response.data && response.data.message || wc_product_export_params.export_error );
++					return;
+ 				}
+ 
++				$this.$form.find( '.woocommerce-exporter-progress' ).val( response.data.percentage );
++				if ( 'done' === response.data.step && response.data.url ) {
++					window.location = response.data.url;
++					window.setTimeout( function() { $this.stop(); }, 2000 );
++					return;
++				}
++
++				var nextStep = parseInt( response.data.step, 10 );
++				if ( nextStep !== step + 1 ) {
++					$this.stop( wc_product_export_params.export_error );
++					return;
++				}
++
++				$this.processStep( nextStep, data, response.data.columns, filename, response.data.cursor );
++			}
++		} ).fail( function( response, status ) {
++			var error = response.responseJSON && response.responseJSON.data;
++			if ( error && error.message ) {
++				$this.stop( error.message );
++				return;
++			}
+ 
++			var reason = 'timeout' === status ? wc_product_export_params.export_timeout : wc_product_export_params.export_error;
++			if ( response.status >= 400 ) {
++				reason += ' (HTTP ' + response.status + ')';
+ 			}
+-		} ).fail( function( response ) {
+-			window.console.log( response );
++			$this.stop( reason + ' ' + wc_product_export_params.export_error_batch.replace( '%d', step ) );
+ 		} );
+ 	};
+ 
+diff --git a/woocommerce/assets/js/admin/wc-product-export.min.js b/woocommerce/assets/js/admin/wc-product-export.min.js
+index f5883332fd84e3a4b4942daa261585bdc5220b96..7d288c6f0a6a9e7abbe2a2fcd97cf67b196d5996 100644
+--- a/woocommerce/assets/js/admin/wc-product-export.min.js
++++ b/woocommerce/assets/js/admin/wc-product-export.min.js
+@@ -1 +1 @@
+-!function(o,e){var r=function(o){this.$form=o,this.xhr=!1,this.$form.find(".woocommerce-exporter-progress").val(0),this.processStep=this.processStep.bind(this),o.on("submit",{productExportForm:this},this.onSubmit),o.find(".woocommerce-exporter-types").on("change",{productExportForm:this},this.exportTypeFields)};r.prototype.onSubmit=function(e){e.preventDefault();var r=new Date,t="wc-product-export-"+r.getDate()+"-"+(r.getMonth()+1)+"-"+r.getFullYear()+"-"+r.getTime()+".csv";e.data.productExportForm.$form.addClass("woocommerce-exporter__exporting"),e.data.productExportForm.$form.find(".woocommerce-exporter-progress").val(0),e.data.productExportForm.$form.find(".woocommerce-exporter-button").prop("disabled",!0),e.data.productExportForm.processStep(1,o(this).serialize(),"",t)},r.prototype.processStep=function(r,t,c,p){var a=this,s=o(".woocommerce-exporter-columns").val(),m=o("#woocommerce-exporter-meta:checked").length?1:0,n=o(".woocommerce-exporter-types").val(),i=o(".woocommerce-exporter-category").val(),d=a.$form.find('input[name="product_ids"]').val()||"";o.ajax({type:"POST",url:ajaxurl,data:{form:t,action:"woocommerce_do_ajax_product_export",step:r,columns:c,selected_columns:s,export_meta:m,export_types:n,export_category:i,export_product_ids:d,filename:p,security:wc_product_export_params.export_nonce},dataType:"json",success:function(o){o.success&&("done"===o.data.step?(a.$form.find(".woocommerce-exporter-progress").val(o.data.percentage),e.location=o.data.url,setTimeout(function(){a.$form.removeClass("woocommerce-exporter__exporting"),a.$form.find(".woocommerce-exporter-button").prop("disabled",!1)},2e3)):(a.$form.find(".woocommerce-exporter-progress").val(o.data.percentage),a.processStep(parseInt(o.data.step,10),t,o.data.columns,p)))}}).fail(function(o){e.console.log(o)})},r.prototype.exportTypeFields=function(){var e=o(".woocommerce-exporter-category");-1!==o.inArray("variation",o(this).val())?(e.closest("tr").hide(),e.val("").trigger("change")):e.closest("tr").show()},o.fn.wc_product_export_form=function(){return new r(this),this},o(".woocommerce-exporter").wc_product_export_form()}(jQuery,window);
+\ No newline at end of file
++!function(e,o){var r=function(o){this.$form=o,this.$error=e('<div class="notice notice-error inline woocommerce-export-error" role="alert">').append(e("<p>")).hide(),this.$error.insertBefore(o.find("section").first()),this.$form.find(".woocommerce-exporter-progress").val(0),this.processStep=this.processStep.bind(this),o.on("submit",{productExportForm:this},this.onSubmit),o.find(".woocommerce-exporter-types").on("change",{productExportForm:this},this.exportTypeFields)};r.prototype.onSubmit=function(o){o.preventDefault();var r=o.data.productExportForm,t=new Date,p="wc-product-export-"+t.getDate()+"-"+(t.getMonth()+1)+"-"+t.getFullYear()+"-"+t.getTime()+".csv";r.$form.hasClass("woocommerce-exporter__exporting")||(r.$error.hide(),r.$form.addClass("woocommerce-exporter__exporting"),r.$form.find(".woocommerce-exporter-progress").val(0),r.$form.find(".woocommerce-exporter-button").prop("disabled",!0),r.processStep(1,e(this).serialize(),"",p,"start"))},r.prototype.stop=function(e){this.$form.removeClass("woocommerce-exporter__exporting"),this.$form.find(".woocommerce-exporter-button").prop("disabled",!1),e&&(this.$error.find("p").text(e),this.$error.show())},r.prototype.processStep=function(r,t,p,s,c){var a=this,i=e(".woocommerce-exporter-columns").val(),m=e("#woocommerce-exporter-meta:checked").length?1:0,n=e(".woocommerce-exporter-types").val(),d=e(".woocommerce-exporter-category").val(),u=a.$form.find('input[name="product_ids"]').val()||"";e.ajax({type:"POST",url:ajaxurl,timeout:9e4,data:{form:t,action:"woocommerce_do_ajax_product_export",step:r,columns:p,selected_columns:i,export_meta:m,export_types:n,export_category:d,export_product_ids:u,filename:s,export_cursor:c||"",security:wc_product_export_params.export_nonce},dataType:"json",success:function(e){if(e&&e.success&&e.data){if(a.$form.find(".woocommerce-exporter-progress").val(e.data.percentage),"done"===e.data.step&&e.data.url)return o.location=e.data.url,void o.setTimeout(function(){a.stop()},2e3);var p=parseInt(e.data.step,10);p===r+1?a.processStep(p,t,e.data.columns,s,e.data.cursor):a.stop(wc_product_export_params.export_error)}else a.stop(e&&e.data&&e.data.message||wc_product_export_params.export_error)}}).fail(function(e,o){var t=e.responseJSON&&e.responseJSON.data;if(t&&t.message)a.stop(t.message);else{var p="timeout"===o?wc_product_export_params.export_timeout:wc_product_export_params.export_error;e.status>=400&&(p+=" (HTTP "+e.status+")"),a.stop(p+" "+wc_product_export_params.export_error_batch.replace("%d",r))}})},r.prototype.exportTypeFields=function(){var o=e(".woocommerce-exporter-category");-1!==e.inArray("variation",e(this).val())?(o.closest("tr").hide(),o.val("").trigger("change")):o.closest("tr").show()},e.fn.wc_product_export_form=function(){return new r(this),this},e(".woocommerce-exporter").wc_product_export_form()}(jQuery,window);
+\ No newline at end of file
+diff --git a/woocommerce/includes/admin/class-wc-admin-exporters.php b/woocommerce/includes/admin/class-wc-admin-exporters.php
+index d86331d5d15aa70d4aff105491c22d109fb22dd4..5a4c3a9e0490fa1cd3db3eb6ce2f139f947be428 100644
+--- a/woocommerce/includes/admin/class-wc-admin-exporters.php
++++ b/woocommerce/includes/admin/class-wc-admin-exporters.php
+@@ -108,7 +108,10 @@ class WC_Admin_Exporters {
+ 			'wc-product-export',
+ 			'wc_product_export_params',
+ 			array(
+-				'export_nonce' => wp_create_nonce( 'wc-product-export' ),
++				'export_nonce'       => wp_create_nonce( 'wc-product-export' ),
++				'export_error'       => __( 'The product export stopped because the server returned an unexpected response. Please try again.', 'woocommerce' ),
++				'export_timeout'     => __( 'The product export request timed out.', 'woocommerce' ),
++				'export_error_batch' => __( 'Export stopped at batch %d.', 'woocommerce' ),
+ 			)
+ 		);
+ 	}
+@@ -151,6 +154,8 @@ class WC_Admin_Exporters {
+ 
+ 		$step     = isset( $_POST['step'] ) ? absint( $_POST['step'] ) : 1; // WPCS: input var ok, sanitization ok.
+ 		$exporter = new WC_Product_CSV_Exporter();
++		$cursor   = isset( $_POST['export_cursor'] ) ? absint( wp_unslash( $_POST['export_cursor'] ) ) : 0; // WPCS: input var ok, sanitization ok.
++		$exporter->set_export_cursor( $cursor );
+ 
+ 		if ( ! empty( $_POST['columns'] ) ) { // WPCS: input var ok.
+ 			$exporter->set_column_names( wp_unslash( $_POST['columns'] ) ); // WPCS: input var ok, sanitization ok.
+@@ -211,6 +216,7 @@ class WC_Admin_Exporters {
+ 					'step'       => ++$step,
+ 					'percentage' => $exporter->get_percent_complete(),
+ 					'columns'    => $exporter->get_column_names(),
++					'cursor'     => $exporter->get_next_export_cursor(),
+ 				)
+ 			);
+ 		}
+diff --git a/woocommerce/includes/export/abstract-wc-csv-batch-exporter.php b/woocommerce/includes/export/abstract-wc-csv-batch-exporter.php
+index 73fd268af6672c6698b32d9b8dcb9c0a1bc6b337..e92645aa7ed2087f59457ae175e012c0f5eb1b5f 100644
+--- a/woocommerce/includes/export/abstract-wc-csv-batch-exporter.php
++++ b/woocommerce/includes/export/abstract-wc-csv-batch-exporter.php
+@@ -95,8 +95,69 @@ abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
+ 	 * @since 3.1.0
+ 	 */
+ 	public function export() {
++		$legacy_output_is_overridden = 'WC_CSV_Exporter' !== ( new ReflectionMethod( $this, 'send_content' ) )->getDeclaringClass()->getName()
++			|| __CLASS__ !== ( new ReflectionMethod( $this, 'get_file' ) )->getDeclaringClass()->getName()
++			|| __CLASS__ !== ( new ReflectionMethod( $this, 'get_headers_row_file' ) )->getDeclaringClass()->getName();
++
+ 		$this->send_headers();
+-		$this->send_content( $this->get_headers_row_file() . $this->get_file() );
++
++		if ( $legacy_output_is_overridden ) {
++			// Preserve custom exporters that override the public string-based output API.
++			$this->send_content( $this->get_headers_row_file() . $this->get_file() );
++		} else {
++			// Keep the existing behavior of creating an empty file if no export exists.
++			if ( ! file_exists( $this->get_file_path() ) ) {
++				$this->get_file();
++			}
++
++			$output = fopen( 'php://output', 'wb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
++
++			if ( false !== $output ) {
++				$headers_path = $this->get_headers_row_file_path();
++				$headers      = file_exists( $headers_path ) ? fopen( $headers_path, 'rb' ) : false;
++
++				if ( false !== $headers ) {
++					$header_size   = (int) fstat( $headers )['size'];
++					$header_copied = stream_copy_to_stream( $headers, $output );
++					fclose( $headers );
++					$headers_copied = false !== $header_copied && $header_size === $header_copied;
++				} else {
++					$header          = chr( 239 ) . chr( 187 ) . chr( 191 ) . $this->export_column_headers();
++					$header_copied   = fwrite( $output, $header );
++					$headers_copied  = false !== $header_copied && strlen( $header ) === $header_copied;
++				}
++
++				$body = fopen( $this->get_file_path(), 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
++				if ( false !== $body ) {
++					$body_size   = (int) fstat( $body )['size'];
++					$body_copied = stream_copy_to_stream( $body, $output );
++					$body_copied = false !== $body_copied && $body_size === $body_copied;
++				} else {
++					$body_copied = false;
++				}
++				$copied = $headers_copied && $body_copied;
++
++				if ( false !== $body ) {
++					fclose( $body );
++				}
++
++				fclose( $output );
++
++				if ( ! $copied ) {
++					wc_get_logger()->error(
++						sprintf(
++							/* translators: %s is file path. */
++							__( 'Unable to stream the CSV export file %s.', 'woocommerce' ),
++							esc_html( $this->get_file_path() )
++						)
++					);
++					wp_die( esc_html__( 'The CSV export could not be streamed. The generated file has been retained for another attempt.', 'woocommerce' ) );
++				}
++			} else {
++				wp_die( esc_html__( 'The CSV export could not be opened for streaming. The generated file has been retained for another attempt.', 'woocommerce' ) );
++			}
++		}
++
+ 		@unlink( $this->get_file_path() ); // phpcs:ignore WordPress.VIP.FileSystemWritesDisallow.file_ops_unlink, Generic.PHP.NoSilencedErrors.Discouraged
+ 		@unlink( $this->get_headers_row_file_path() ); // phpcs:ignore WordPress.VIP.FileSystemWritesDisallow.file_ops_unlink, Generic.PHP.NoSilencedErrors.Discouraged
+ 		die();
+diff --git a/woocommerce/includes/export/class-wc-product-csv-exporter.php b/woocommerce/includes/export/class-wc-product-csv-exporter.php
+index 329f617b46bdc8caac0254d624c3629228687a46..fa9a6e77ab79c1947df4e120de650e694f045290 100644
+--- a/woocommerce/includes/export/class-wc-product-csv-exporter.php
++++ b/woocommerce/includes/export/class-wc-product-csv-exporter.php
+@@ -63,11 +63,34 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+ 	 */
+ 	protected $product_ids_to_export = array();
+ 
++	/**
++	 * Product objects loaded while generating the current export batch.
++	 *
++	 * @var WC_Product[]
++	 */
++	protected $export_product_cache = array();
++
++	/**
++	 * Grouped product children loaded while generating the current export batch.
++	 *
++	 * @var array<int, int[]>
++	 */
++	protected $export_grouped_children_cache = array();
++
++	/**
++	 * Last product ID returned by the current export query.
++	 *
++	 * @var int
++	 */
++	protected $next_export_cursor = 0;
++
+ 	/**
+ 	 * Constructor.
+ 	 */
+ 	public function __construct() {
+ 		parent::__construct();
++		$batch_limit = (int) apply_filters( 'woocommerce_product_export_initial_batch_limit', 100, $this );
++		$this->set_limit( max( 10, min( 100, $batch_limit ) ) );
+ 		$this->set_product_types_to_export( array_keys( WC_Admin_Exporters::get_product_types() ) );
+ 	}
+ 
+@@ -115,6 +138,24 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+ 		$this->product_ids_to_export = array_filter( array_map( 'absint', (array) $product_ids ) );
+ 	}
+ 
++	/**
++	 * Set the last product ID returned by the previous export batch.
++	 *
++	 * @param int $cursor Last exported product ID.
++	 */
++	public function set_export_cursor( $cursor ) {
++		$this->next_export_cursor = absint( $cursor );
++	}
++
++	/**
++	 * Get the last product ID returned by this export batch.
++	 *
++	 * @return int
++	 */
++	public function get_next_export_cursor() {
++		return $this->next_export_cursor;
++	}
++
+ 	/**
+ 	 * Return an array of columns to export.
+ 	 *
+@@ -223,13 +264,83 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+ 			$args['include'] = array_map( 'absint', (array) $args['include'] );
+ 		}
+ 
+-		$products = wc_get_products( $args );
++		$cursor = $this->next_export_cursor;
++		$this->next_export_cursor = 0;
++		$total_cache_key = $this->get_export_total_cache_key( $args );
++		$cached_total    = false;
++		if ( 1 < $this->get_page() ) {
++			$cached_total = get_transient( $total_cache_key );
++		}
++
++		// Reuse the first batch's count; cursor batches skip both found-rows and OFFSET.
++		$can_reuse_total = false !== $cached_total && is_numeric( $cached_total );
++		if ( $can_reuse_total ) {
++			$args['paginate'] = false;
++		}
++
++		$cursor_compatible = isset( $args['orderby'] )
++			&& array( 'ID' => 'ASC' ) === $args['orderby']
++			&& empty( $args['offset'] );
++		$use_cursor = $cursor_compatible && (
++			1 === $this->get_page()
++			|| ( $can_reuse_total && 0 < $cursor )
++		);
++		if ( $use_cursor ) {
++			$args['page'] = 1;
++			if ( 0 < $cursor ) {
++				$args['wc_product_export_after_id'] = $cursor;
++			}
++		}
++
++		$cursor_filter = null;
++		if ( $use_cursor && 0 < $cursor ) {
++			$cursor_filter = static function ( $where, $query ) use ( $cursor ) {
++				if ( $query instanceof WP_Query && $cursor === absint( $query->get( 'wc_product_export_after_id' ) ) ) {
++					global $wpdb;
++					$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID > %d", $cursor );
++				}
++				return $where;
++			};
++			add_filter( 'posts_where', $cursor_filter, 10, 2 );
++		}
++
++		try {
++			$products = wc_get_products( $args );
++		} finally {
++			if ( $cursor_filter ) {
++				remove_filter( 'posts_where', $cursor_filter, 10 );
++			}
++		}
++
++		if ( $can_reuse_total ) {
++			$this->total_rows = absint( $cached_total );
++			$product_rows     = $products;
++		} else {
++			$this->total_rows = absint( $products->total );
++			$product_rows     = $products->products;
++			if ( 1 === $this->get_page() ) {
++				$expiration = (int) apply_filters( 'woocommerce_product_export_total_cache_expiration', DAY_IN_SECONDS, $this );
++				set_transient( $total_cache_key, $this->total_rows, max( HOUR_IN_SECONDS, $expiration ) );
++			}
++		}
++		if ( $use_cursor && empty( $product_rows ) ) {
++			// The first count is only a progress estimate. If rows disappear while
++			// exporting, finish at the actual cursor boundary instead of looping on
++			// a stale total forever.
++			$this->total_rows = $this->get_total_exported();
++		}
+ 
+-		$this->total_rows  = $products->total;
+ 		$this->row_data    = array();
+ 		$variable_products = array();
++		$this->prime_export_batch_caches( $product_rows );
++		if ( $use_cursor && $product_rows ) {
++			$last_product = end( $product_rows );
++			if ( $last_product instanceof WC_Product ) {
++				$this->next_export_cursor = $last_product->get_id();
++			}
++		}
+ 
+-		foreach ( $products->products as $product ) {
++		foreach ( $product_rows as $product ) {
+ 			// Check if the product is variable and if either the include or category filter is active.
+ 			// This is to ensure that product variations are only included if they are being selectively exported or if they are part of a category.
+ 			if ( ( ! empty( $args['include'] ) || ! empty( $args['category'] ) ) &&
+@@ -257,6 +368,8 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+ 					continue;
+ 				}
+ 
++				$this->prime_export_batch_caches( $products );
++
+ 				foreach ( $products as $product ) {
+ 					$this->row_data[] = $this->generate_row_data( $product );
+ 				}
+@@ -264,6 +377,120 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+ 		}
+ 	}
+ 
++	/**
++	 * Build a per-export key for the product count so later batches do not repeat
++	 * an expensive full query just to rediscover the same total row count.
++	 *
++	 * @param array $args Product query arguments after WooCommerce export filters.
++	 * @return string
++	 */
++	protected function get_export_total_cache_key( $args ) {
++		unset( $args['page'], $args['limit'], $args['return'], $args['paginate'], $args['wc_product_export_after_id'] );
++		$query_hash = hash( 'sha256', (string) wp_json_encode( $args ) );
++
++		return 'wc_product_export_total_' . md5( $this->get_filename() . '|' . $query_hash );
++	}
++
++	/**
++	 * Prime attachment, linked-product and author caches before generating a batch.
++	 *
++	 * Standard WordPress queries already prime the main products. Exporting image
++	 * columns and linked-product columns otherwise performs additional lookups for
++	 * each image/relationship in each row; priming those IDs bounds the database
++	 * work to a small number of queries per batch.
++	 *
++	 * @param WC_Product[] $products Products in the current export batch.
++	 */
++	protected function prime_export_batch_caches( $products ) {
++		$attachment_ids = array();
++		$related_ids    = array();
++		$user_ids       = array();
++
++		foreach ( (array) $products as $product ) {
++			if ( ! $product instanceof WC_Product ) {
++				continue;
++			}
++
++			$product_id = $product->get_id();
++			if ( $product_id ) {
++				$this->export_product_cache[ $product_id ] = $product;
++
++				$post_data = get_post( $product_id );
++				if ( $post_data && ! empty( $post_data->post_author ) ) {
++					$user_ids[] = absint( $post_data->post_author );
++				}
++			}
++
++			$attachment_ids[] = $product->get_image_id( 'edit' );
++			$attachment_ids   = array_merge( $attachment_ids, (array) $product->get_gallery_image_ids( 'edit' ) );
++			$related_ids      = array_merge(
++				$related_ids,
++				(array) $product->get_upsell_ids( 'edit' ),
++				(array) $product->get_cross_sell_ids( 'edit' ),
++				array( $product->get_parent_id( 'edit' ) )
++			);
++
++			// HPT custom export columns resolve logo and TablePress relationship
++			// posts per product. Prime those references as one bounded batch query.
++			foreach ( array( 'logo', 'tablepress' ) as $related_meta_key ) {
++				$related_meta_ids = $product->get_meta( $related_meta_key, true, 'edit' );
++				if ( is_array( $related_meta_ids ) ) {
++					array_walk_recursive(
++						$related_meta_ids,
++						static function ( $related_id ) use ( &$related_ids ) {
++							if ( is_numeric( $related_id ) && absint( $related_id ) > 0 ) {
++								$related_ids[] = absint( $related_id );
++							}
++						}
++					);
++				} elseif ( is_numeric( $related_meta_ids ) && absint( $related_meta_ids ) > 0 ) {
++					$related_ids[] = absint( $related_meta_ids );
++				}
++			}
++
++			if ( $product->is_type( ProductType::GROUPED ) ) {
++				$children = array_filter( array_map( 'absint', (array) $product->get_children( 'edit' ) ) );
++				$this->export_grouped_children_cache[ $product_id ] = $children;
++				$related_ids                                 = array_merge( $related_ids, $children );
++			}
++		}
++
++		$attachment_ids = array_values( array_unique( array_filter( array_map( 'absint', $attachment_ids ) ) ) );
++		$related_ids    = array_values( array_unique( array_filter( array_map( 'absint', $related_ids ) ) ) );
++		$user_ids       = array_values( array_unique( array_filter( array_map( 'absint', $user_ids ) ) ) );
++
++		if ( $attachment_ids && function_exists( '_prime_post_caches' ) ) {
++			_prime_post_caches( $attachment_ids, false, true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
++		}
++
++		if ( $related_ids && function_exists( '_prime_post_caches' ) ) {
++			_prime_post_caches( $related_ids, true, true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
++		}
++
++		if ( $user_ids && function_exists( 'cache_users' ) ) {
++			cache_users( $user_ids ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
++		}
++	}
++
++	/**
++	 * Load and reuse a linked product object within the current export batch.
++	 *
++	 * @param int $product_id Product ID.
++	 * @return WC_Product|false
++	 */
++	protected function get_cached_export_product( $product_id ) {
++		$product_id = absint( $product_id );
++		if ( ! $product_id ) {
++			return false;
++		}
++
++		if ( ! array_key_exists( $product_id, $this->export_product_cache ) ) {
++			$this->export_product_cache[ $product_id ] = wc_get_product( $product_id );
++		}
++
++		return $this->export_product_cache[ $product_id ];
++	}
++
+ 	/**
+ 	 * Take a product and generate row data from it for export.
+ 	 *
+@@ -460,7 +687,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+ 	 * @return string
+ 	 */
+ 	protected function get_column_value_cross_sell_ids( $product ) {
+-		return $this->prepare_linked_products_for_export( array_filter( array_map( 'wc_get_product', (array) $product->get_cross_sell_ids( 'edit' ) ) ) );
++		return $this->prepare_linked_products_for_export( array_filter( array_map( array( $this, 'get_cached_export_product' ), (array) $product->get_cross_sell_ids( 'edit' ) ) ) );
+ 	}
+ 
+ 	/**
+@@ -472,7 +699,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+ 	 * @return string
+ 	 */
+ 	protected function get_column_value_upsell_ids( $product ) {
+-		return $this->prepare_linked_products_for_export( array_filter( array_map( 'wc_get_product', (array) $product->get_upsell_ids( 'edit' ) ) ) );
++		return $this->prepare_linked_products_for_export( array_filter( array_map( array( $this, 'get_cached_export_product' ), (array) $product->get_upsell_ids( 'edit' ) ) ) );
+ 	}
+ 
+ 	/**
+@@ -485,7 +712,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+ 	 */
+ 	protected function get_column_value_parent_id( $product ) {
+ 		if ( $product->get_parent_id( 'edit' ) ) {
+-			$parent = wc_get_product( $product->get_parent_id( 'edit' ) );
++			$parent = $this->get_cached_export_product( $product->get_parent_id( 'edit' ) );
+ 			if ( ! $parent ) {
+ 				return '';
+ 			}
+@@ -509,9 +736,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+ 		}
+ 
+ 		$grouped_products = array();
+-		$child_ids        = $product->get_children( 'edit' );
++		$child_ids        = $this->export_grouped_children_cache[ $product->get_id() ] ?? $product->get_children( 'edit' );
+ 		foreach ( $child_ids as $child_id ) {
+-			$child = wc_get_product( $child_id );
++			$child = $this->get_cached_export_product( $child_id );
+ 			if ( ! $child ) {
+ 				continue;
+ 			}
+diff --git a/woocommerce/includes/import/class-wc-csv-stream-reader.php b/woocommerce/includes/import/class-wc-csv-stream-reader.php
+new file mode 100644
+index 0000000000000000000000000000000000000000..dc136cfbee2371cdf43ea292b20e8ca608804b8d
+--- /dev/null
++++ b/woocommerce/includes/import/class-wc-csv-stream-reader.php
+@@ -0,0 +1,168 @@
++<?php
++/**
++ * Bounded record scanner for seekable CSV streams.
++ *
++ * @package WooCommerce\Import
++ */
++
++defined( 'ABSPATH' ) || exit;
++
++/**
++ * Checks CSV record and field sizes without reading an entire oversized record into memory.
++ *
++ * The scanner reads fixed-size blocks, validates one logical CSV record (including
++ * quoted line breaks), then rewinds so PHP's fgetcsv() can parse the validated row.
++ */
++class WC_CSV_Stream_Reader {
++	/**
++	 * Scan the next logical CSV record and enforce its byte limits.
++	 *
++	 * @param resource $stream          Seekable CSV file handle.
++	 * @param string   $delimiter       CSV field delimiter.
++	 * @param string   $enclosure       CSV enclosure character.
++	 * @param string   $escape          CSV escape character; NUL disables escaping.
++	 * @param int      $max_record_size Maximum logical record size in bytes.
++	 * @param int      $max_field_size  Maximum individual field size in bytes.
++	 * @return bool True when a record is present, false at EOF.
++	 * @throws RuntimeException When the stream is not seekable, is malformed, or exceeds a byte limit.
++	 */
++	public static function assert_record_bounds( $stream, $delimiter, $enclosure, $escape, $max_record_size, $max_field_size ) {
++		$record_start = ftell( $stream );
++		if ( false === $record_start ) {
++			throw new RuntimeException( __( 'The CSV file is not seekable; the import cannot checkpoint it safely.', 'woocommerce' ) );
++		}
++
++		$delimiter       = (string) $delimiter;
++		$enclosure       = (string) $enclosure;
++		$escape          = (string) $escape;
++		$max_record_size = max( 1, (int) $max_record_size );
++		$max_field_size  = max( 1, min( $max_record_size, (int) $max_field_size ) );
++		$record_size     = 0;
++		$field_size      = 0;
++		$in_enclosure    = false;
++		$enclosure_pending = false;
++		$escaped         = false;
++		$found_record    = false;
++
++		while ( ! feof( $stream ) ) {
++			$chunk = fread( $stream, 1024 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fread
++			if ( false === $chunk || '' === $chunk ) {
++				break;
++			}
++
++			$chunk_size = strlen( $chunk );
++			for ( $index = 0; $index < $chunk_size; ++$index ) {
++				$character = $chunk[ $index ];
++				++$record_size;
++				$found_record = true;
++
++				if ( $record_size > $max_record_size ) {
++					throw new RuntimeException(
++						sprintf(
++							/* translators: %d: maximum CSV record size in bytes. */
++							__( 'CSV record exceeds the maximum allowed size of %d bytes.', 'woocommerce' ),
++							$max_record_size
++						)
++					);
++				}
++
++				if ( $in_enclosure && $enclosure_pending ) {
++					$enclosure_pending = false;
++					if ( $character === $enclosure ) {
++						// Doubled enclosure inside a quoted field represents one data byte.
++						++$field_size;
++						self::assert_field_size( $field_size, $max_field_size );
++						continue;
++					}
++
++					$in_enclosure = false;
++				}
++
++				if ( $in_enclosure ) {
++					if ( $escaped ) {
++						++$field_size;
++						self::assert_field_size( $field_size, $max_field_size );
++						$escaped = false;
++						continue;
++					}
++
++					if ( "\0" !== $escape && '' !== $escape && $character === $escape ) {
++					++$field_size;
++					self::assert_field_size( $field_size, $max_field_size );
++					$escaped = true;
++					continue;
++				}
++
++					if ( $character === $enclosure ) {
++					$enclosure_pending = true;
++					continue;
++				}
++
++					++$field_size;
++					self::assert_field_size( $field_size, $max_field_size );
++					continue;
++				}
++
++				if ( $escaped ) {
++					++$field_size;
++					self::assert_field_size( $field_size, $max_field_size );
++					$escaped = false;
++					continue;
++				}
++
++				if ( "\0" !== $escape && '' !== $escape && $character === $escape ) {
++					++$field_size;
++					self::assert_field_size( $field_size, $max_field_size );
++					$escaped = true;
++					continue;
++				}
++
++				if ( $character === $delimiter ) {
++					$field_size = 0;
++					continue;
++				}
++
++				if ( $character === $enclosure && 0 === $field_size ) {
++					$in_enclosure = true;
++					continue;
++				}
++
++				if ( "\n" === $character || "\r" === $character ) {
++					break 2;
++				}
++
++				++$field_size;
++				self::assert_field_size( $field_size, $max_field_size );
++			}
++		}
++
++		if ( $in_enclosure && ! $enclosure_pending ) {
++			throw new RuntimeException( __( 'The CSV file contains an unterminated quoted field.', 'woocommerce' ) );
++		}
++
++		if ( 0 !== fseek( $stream, $record_start ) ) {
++			throw new RuntimeException( __( 'The CSV file could not be rewound to its last checkpoint.', 'woocommerce' ) );
++		}
++
++		return $found_record;
++	}
++
++	/**
++	 * Assert that the current field does not exceed the configured byte limit.
++	 *
++	 * @param int $field_size      Field size in bytes.
++	 * @param int $max_field_size Maximum field size in bytes.
++	 * @throws RuntimeException When the field exceeds the configured maximum.
++	 */
++	private static function assert_field_size( $field_size, $max_field_size ) {
++		if ( $field_size > $max_field_size ) {
++			throw new RuntimeException(
++				sprintf(
++					/* translators: %d: maximum CSV field size in bytes. */
++					__( 'CSV field exceeds the maximum allowed size of %d bytes.', 'woocommerce' ),
++					$max_field_size
++				)
++			);
++		}
++	}
++}
+diff --git a/woocommerce/includes/import/class-wc-product-csv-importer.php b/woocommerce/includes/import/class-wc-product-csv-importer.php
+index 8a48b7a19ac7f1b42979df4d81625d64e7b6ce42..863538ad26dfdc202c86e1387c4c5aef9196e552 100644
+--- a/woocommerce/includes/import/class-wc-product-csv-importer.php
++++ b/woocommerce/includes/import/class-wc-product-csv-importer.php
+@@ -28,6 +28,10 @@ if ( ! class_exists( 'WC_Product_CSV_Importer_Controller', false ) ) {
+ 	include_once WC_ABSPATH . 'includes/admin/importers/class-wc-product-csv-importer-controller.php';
+ }
+ 
++if ( ! class_exists( 'WC_CSV_Stream_Reader', false ) ) {
++	include_once __DIR__ . '/class-wc-csv-stream-reader.php';
++}
++
+ /**
+  * WC_Product_CSV_Importer Class.
+  */
+@@ -40,6 +44,13 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
+ 	 */
+ 	protected $parsing_raw_data_index = 0;
+ 
++	/**
++	 * File positions aligned with parsed records, including skipped empty CSV rows.
++	 *
++	 * @var int[]
++	 */
++	protected $parsed_data_file_positions = array();
++
+ 	/**
+ 	 * Is the Cost of Goods Sold feature enabled?
+ 	 *
+@@ -67,6 +78,9 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
+ 			'prevent_timeouts' => true, // Check memory and time usage and abort if reaching limit.
+ 			'enclosure'        => '"', // The character used to wrap text in the CSV.
+ 			'escape'           => "\0", // PHP uses '\' as the default escape character. This is not RFC-4180 compliant. This disables the escape character.
++			'max_record_bytes' => apply_filters( 'woocommerce_product_importer_max_record_bytes', 4 * 1024 * 1024 ),
++			'max_field_bytes'  => apply_filters( 'woocommerce_product_importer_max_field_bytes', 2 * 1024 * 1024 ),
++			'max_batch_bytes'  => apply_filters( 'woocommerce_product_importer_max_batch_bytes', 16 * 1024 * 1024 ),
+ 		);
+ 
+ 		$this->params = wp_parse_args( $params, $default_args );
+@@ -101,9 +115,13 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
+ 			wp_die( esc_html__( 'Invalid file type. The importer supports CSV and TXT file formats.', 'woocommerce' ) );
+ 		}
+ 
+-		$handle = fopen( $this->file, 'r' ); // @codingStandardsIgnoreLine.
++		$handle = fopen( $this->file, 'rb' ); // @codingStandardsIgnoreLine.
+ 
+ 		if ( false !== $handle ) {
++			if ( ! WC_CSV_Stream_Reader::assert_record_bounds( $handle, $this->params['delimiter'], $this->params['enclosure'], $this->params['escape'], $this->params['max_record_bytes'], $this->params['max_field_bytes'] ) ) {
++				throw new RuntimeException( __( 'The CSV file does not contain a header row.', 'woocommerce' ) );
++			}
++
+ 			$this->raw_keys = array_map( 'trim', fgetcsv( $handle, 0, $this->params['delimiter'], $this->params['enclosure'], $this->params['escape'] ) ); // @codingStandardsIgnoreLine
+ 
+ 			if ( ArrayUtil::is_truthy( $this->params, 'character_encoding' ) ) {
+@@ -122,7 +140,14 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
+ 				fseek( $handle, (int) $this->params['start_pos'] );
+ 			}
+ 
++			$batch_start     = ftell( $handle );
++			$max_batch_bytes = max( 1024 * 1024, absint( $this->params['max_batch_bytes'] ) );
++
+ 			while ( 1 ) {
++				if ( ! WC_CSV_Stream_Reader::assert_record_bounds( $handle, $this->params['delimiter'], $this->params['enclosure'], $this->params['escape'], $this->params['max_record_bytes'], $this->params['max_field_bytes'] ) ) {
++					break;
++				}
++
+ 				$row = fgetcsv( $handle, 0, $this->params['delimiter'], $this->params['enclosure'], $this->params['escape'] ); // @codingStandardsIgnoreLine
+ 
+ 				if ( false !== $row ) {
+@@ -133,7 +158,9 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
+ 					$this->raw_data[]                                 = $row;
+ 					$this->file_positions[ count( $this->raw_data ) ] = ftell( $handle );
+ 
+-					if ( ( $this->params['end_pos'] > 0 && ftell( $handle ) >= $this->params['end_pos'] ) || 0 === --$this->params['lines'] ) {
++					if ( ( $this->params['end_pos'] > 0 && ftell( $handle ) >= $this->params['end_pos'] )
++						|| 0 === --$this->params['lines']
++						|| ftell( $handle ) - $batch_start >= $max_batch_bytes ) {
+ 						break;
+ 					}
+ 				} else {
+@@ -1100,6 +1127,7 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
+ 			 * @since
+ 			 */
+ 			$this->parsed_data[] = apply_filters( 'woocommerce_product_importer_parsed_data', $this->expand_data( $data ), $this );
++			$this->parsed_data_file_positions[] = $this->file_positions[ $row_index + 1 ] ?? $this->file_position;
+ 		}
+ 	}
+ 
+@@ -1142,7 +1170,6 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
+ 	 */
+ 	public function import() {
+ 		$this->start_time = time();
+-		$index            = 0;
+ 		$update_existing  = $this->params['update_existing'];
+ 		$data             = array(
+ 			'imported'            => array(),
+@@ -1180,6 +1207,11 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
+ 						'row' => $this->get_row_id( $parsed_data ),
+ 					)
+ 				);
++				$this->file_position = $this->parsed_data_file_positions[ $parsed_data_key ] ?? $this->file_position;
++
++				if ( $this->params['prevent_timeouts'] && ( $this->time_exceeded() || $this->memory_exceeded() ) ) {
++					break;
++				}
+ 				continue;
+ 			}
+ 
+@@ -1192,6 +1224,11 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
+ 						'row' => $this->get_row_id( $parsed_data ),
+ 					)
+ 				);
++				$this->file_position = $this->parsed_data_file_positions[ $parsed_data_key ] ?? $this->file_position;
++
++				if ( $this->params['prevent_timeouts'] && ( $this->time_exceeded() || $this->memory_exceeded() ) ) {
++					break;
++				}
+ 				continue;
+ 			}
+ 
+@@ -1205,6 +1242,11 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
+ 						'row' => $this->get_row_id( $parsed_data ),
+ 					)
+ 				);
++				$this->file_position = $this->parsed_data_file_positions[ $parsed_data_key ] ?? $this->file_position;
++
++				if ( $this->params['prevent_timeouts'] && ( $this->time_exceeded() || $this->memory_exceeded() ) ) {
++					break;
++				}
+ 				continue;
+ 			}
+ 
+@@ -1221,10 +1263,9 @@ class WC_Product_CSV_Importer extends WC_Product_Importer {
+ 				$data['imported'][] = $result['id'];
+ 			}
+ 
+-			++$index;
++			$this->file_position = $this->parsed_data_file_positions[ $parsed_data_key ] ?? $this->file_position;
+ 
+ 			if ( $this->params['prevent_timeouts'] && ( $this->time_exceeded() || $this->memory_exceeded() ) ) {
+-				$this->file_position = $this->file_positions[ $index ];
+ 				break;
+ 			}
+ 		}
