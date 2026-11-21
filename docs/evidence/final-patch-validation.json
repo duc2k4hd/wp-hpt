@@ -1,0 +1,53 @@
+{
+  "base": "c8e7a752e287e4e30c146686181746da55e3e6a9",
+  "branch": "wc-export-engine-finalize-20261121",
+  "apply_check": true,
+  "reverse_check": true,
+  "files": [
+    {
+      "path": "wp-content/plugins/woocommerce/woocommerce.php",
+      "applied_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/data-stores/class-wc-product-variation-data-store-cpt.php",
+      "applied_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-bootstrap.php",
+      "applied_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-command.php",
+      "applied_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php",
+      "applied_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-files.php",
+      "applied_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php",
+      "applied_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php",
+      "applied_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-store.php",
+      "applied_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php",
+      "applied_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/assets/js/admin/wc-large-product-export.js",
+      "applied_matches_source": true
+    }
+  ],
+  "patch_sha256": "6acaf177a65126ca61b7a0aa9f18f7713b922bae85619634c1dcc5cb33a721c0"
+}

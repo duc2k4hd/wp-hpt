@@ -1,0 +1,1 @@
+{"test":"export-dynamic-columns","passed":true,"rows":8,"late_metadata_column":true,"late_custom_getter_persists_across_chunks":true,"fixed_row_width":true,"legacy_crud_data_parity":true}

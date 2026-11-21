@@ -61,6 +61,13 @@ function wc_get_container() {
 // Global for backwards compatibility.
 $GLOBALS['woocommerce'] = WC();
 
+// Keep the stock exporter unchanged unless a site explicitly enables the
+// isolated, durable large-export worker in wp-config.php.
+if ( defined( 'WC_LARGE_PRODUCT_EXPORT' ) && true === WC_LARGE_PRODUCT_EXPORT ) {
+	require_once __DIR__ . '/includes/export/large-export/class-bootstrap.php';
+	\Automattic\WooCommerce\Internal\LargeExport\Bootstrap::register();
+}
+
 // Jetpack's Rest_Authentication needs to be initialized even before plugins_loaded.
 if ( class_exists( \Automattic\Jetpack\Connection\Rest_Authentication::class ) ) {
 	\Automattic\Jetpack\Connection\Rest_Authentication::init();

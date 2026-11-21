@@ -1,0 +1,1 @@
+{"test":"export-recovery","passed":true,"idempotent_start":true,"single_writer_lease":true,"pause_resume_cancel":true,"bounded_retry":true,"orphan_chunk_recovery":true,"csv_multiline_unicode":true,"checksum_verification":true,"range_parsing":true}

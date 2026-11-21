@@ -1,0 +1,1 @@
+{"test":"export-runtime","php":"7.4.33","passed":true,"checksum_algorithm":"sha256-segments-v1","crud_rows":5,"large_cell_bytes":4200000,"delimiter_bom_empty_cells":true,"insufficient_space_guard":true,"path_traversal_rejected":true,"artifact_checkpoint_mismatch_rejected":true,"zip_replay_tested":false,"zip_multipart_crc_tested":false,"peak_php_bytes":132120576}

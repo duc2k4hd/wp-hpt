@@ -1,0 +1,56 @@
+{
+    "id": "7605ce81-efc7-49cb-872f-c59c52382c7e",
+    "status": "completed",
+    "mode": "keyset",
+    "format": "csv",
+    "rows": 2,
+    "estimate": null,
+    "progress": 100,
+    "rate": 94.47,
+    "eta": null,
+    "elapsed": 0,
+    "batch": 500,
+    "bytes": 152,
+    "staging_bytes": 152,
+    "database_queries": 10,
+    "database_seconds": 0.013,
+    "writer_seconds": 0.008,
+    "peak_memory_bytes": 127926272,
+    "work_units": 1,
+    "avg_unit_seconds": 0.021,
+    "p95_recent_128_unit_seconds": 0.021,
+    "max_unit_seconds": 0.021,
+    "checksum": "5df8d6a01e64eba2cb479f2573a12c71c998f783a56643e7c7fac54c43d42f5f",
+    "attempts": 0,
+    "last_error": "",
+    "logs": [
+        {
+            "at": 1795243874,
+            "status": "queued"
+        },
+        {
+            "at": 1795243906,
+            "status": "paused"
+        },
+        {
+            "at": 1795243909,
+            "status": "queued"
+        },
+        {
+            "at": 1795243910,
+            "status": "running"
+        },
+        {
+            "at": 1795243910,
+            "status": "finalizing"
+        },
+        {
+            "at": 1795243910,
+            "status": "verifying"
+        },
+        {
+            "at": 1795243910,
+            "status": "completed"
+        }
+    ]
+}

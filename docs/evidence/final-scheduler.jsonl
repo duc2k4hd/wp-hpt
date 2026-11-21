@@ -1,0 +1,3 @@
+{"test":"scheduler-selection","runner":"cli","passed":true,"mocked_queue":true}
+{"test":"scheduler-selection","runner":"cron","passed":true,"mocked_queue":true}
+{"test":"scheduler-selection","runner":"action-scheduler","passed":true,"mocked_queue":true}

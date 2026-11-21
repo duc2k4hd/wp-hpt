@@ -1,0 +1,1 @@
+{"test":"export-http","passed":true,"transport":"PHP loopback server / cURL","file_bytes":6689,"full_200":true,"range_206_exact_bytes":true,"resume_reassembled_exactly":true,"unsatisfiable_416":true,"head":true,"if_range_mismatch_200":true,"expired_nonce_403":true,"other_owner_404":true,"capability_revoked_403":true,"offload_tested":false}

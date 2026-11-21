@@ -1,0 +1,1 @@
+Failed loading E:/wamp64/bin/php/php8.4.0/zend_ext/php_xdebug-3.4.0beta1-8.4-x86_64.dll

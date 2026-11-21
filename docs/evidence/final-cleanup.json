@@ -1,0 +1,28 @@
+{
+  "removed_test_files": [
+    "tests/export-analyze.php",
+    "tests/export-benchmark.php",
+    "tests/export-contract.php",
+    "tests/export-crash-worker.php",
+    "tests/export-crash.php",
+    "tests/export-dynamic-columns.php",
+    "tests/export-environment.php",
+    "tests/export-final-review.php",
+    "tests/export-flag.php",
+    "tests/export-formulas.php",
+    "tests/export-http.php",
+    "tests/export-profile.php",
+    "tests/export-readonly.php",
+    "tests/export-recovery.php",
+    "tests/export-retention.php",
+    "tests/export-runtime.php",
+    "tests/export-scheduler.php",
+    "tests/export-seed.php",
+    "tests/export-stage.php",
+    "tests/export-start-retry.js",
+    "tests/export-status-http.php",
+    "tests/export-sync-stage.ps1"
+  ],
+  "empty_stderr_files_removed": 43,
+  "preserved_existing_tracked_utilities": true
+}

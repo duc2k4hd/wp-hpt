@@ -20,6 +20,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @version  3.0.0
  */
 class WC_Product_Variation_Data_Store_CPT extends WC_Product_Data_Store_CPT implements WC_Object_Data_Store_Interface {
+
+	/** Capability marker for the opt-in exporter's read-only hydration guard. */
+	public const LARGE_EXPORT_READ_ONLY_VERSION = 1;
 	/**
 	 * Callback to remove unwanted meta data.
 	 *
@@ -98,7 +101,14 @@ class WC_Product_Variation_Data_Store_CPT extends WC_Product_Data_Store_CPT impl
 			$updates = array_merge( $updates, array( 'post_title' => $new_title ) );
 		}
 
-		if ( ! empty( $updates ) ) {
+		/**
+		 * Allow read-only consumers to retain the computed in-memory title without
+		 * persisting an unrelated repair while reading variation data.
+		 *
+		 * @param bool                 $persist Whether to repair the stored title.
+		 * @param WC_Product_Variation $product Variation being hydrated.
+		 */
+		if ( ! empty( $updates ) && apply_filters( 'woocommerce_product_variation_update_title_on_read', true, $product ) ) {
 			$GLOBALS['wpdb']->update( $GLOBALS['wpdb']->posts, $updates, array( 'ID' => $product->get_id() ) );
 			clean_post_cache( $product->get_id() );
 		}

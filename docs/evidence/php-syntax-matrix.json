@@ -1,0 +1,32 @@
+[
+  {
+    "php": "7.4.33",
+    "passed": true,
+    "files": 27
+  },
+  {
+    "php": "8.0.30",
+    "passed": true,
+    "files": 27
+  },
+  {
+    "php": "8.1.31",
+    "passed": true,
+    "files": 27
+  },
+  {
+    "php": "8.2.26",
+    "passed": true,
+    "files": 27
+  },
+  {
+    "php": "8.3.14",
+    "passed": true,
+    "files": 27
+  },
+  {
+    "php": "8.4.0",
+    "passed": true,
+    "files": 27
+  }
+]

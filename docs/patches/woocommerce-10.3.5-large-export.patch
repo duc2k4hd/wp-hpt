@@ -1,0 +1,3805 @@
+diff --git a/wp-content/plugins/woocommerce/includes/data-stores/class-wc-product-variation-data-store-cpt.php b/wp-content/plugins/woocommerce/includes/data-stores/class-wc-product-variation-data-store-cpt.php
+index 18195ace..45b3b0f5 100644
+--- a/wp-content/plugins/woocommerce/includes/data-stores/class-wc-product-variation-data-store-cpt.php
++++ b/wp-content/plugins/woocommerce/includes/data-stores/class-wc-product-variation-data-store-cpt.php
+@@ -20,6 +20,9 @@ if ( ! defined( 'ABSPATH' ) ) {
+  * @version  3.0.0
+  */
+ class WC_Product_Variation_Data_Store_CPT extends WC_Product_Data_Store_CPT implements WC_Object_Data_Store_Interface {
++
++	/** Capability marker for the opt-in exporter's read-only hydration guard. */
++	public const LARGE_EXPORT_READ_ONLY_VERSION = 1;
+ 	/**
+ 	 * Callback to remove unwanted meta data.
+ 	 *
+@@ -98,7 +101,14 @@ class WC_Product_Variation_Data_Store_CPT extends WC_Product_Data_Store_CPT impl
+ 			$updates = array_merge( $updates, array( 'post_title' => $new_title ) );
+ 		}
+ 
+-		if ( ! empty( $updates ) ) {
++		/**
++		 * Allow read-only consumers to retain the computed in-memory title without
++		 * persisting an unrelated repair while reading variation data.
++		 *
++		 * @param bool                 $persist Whether to repair the stored title.
++		 * @param WC_Product_Variation $product Variation being hydrated.
++		 */
++		if ( ! empty( $updates ) && apply_filters( 'woocommerce_product_variation_update_title_on_read', true, $product ) ) {
+ 			$GLOBALS['wpdb']->update( $GLOBALS['wpdb']->posts, $updates, array( 'ID' => $product->get_id() ) );
+ 			clean_post_cache( $product->get_id() );
+ 		}
+diff --git a/wp-content/plugins/woocommerce/woocommerce.php b/wp-content/plugins/woocommerce/woocommerce.php
+index ca148944..34308e1a 100644
+--- a/wp-content/plugins/woocommerce/woocommerce.php
++++ b/wp-content/plugins/woocommerce/woocommerce.php
+@@ -61,6 +61,13 @@ function wc_get_container() {
+ // Global for backwards compatibility.
+ $GLOBALS['woocommerce'] = WC();
+ 
++// Keep the stock exporter unchanged unless a site explicitly enables the
++// isolated, durable large-export worker in wp-config.php.
++if ( defined( 'WC_LARGE_PRODUCT_EXPORT' ) && true === WC_LARGE_PRODUCT_EXPORT ) {
++	require_once __DIR__ . '/includes/export/large-export/class-bootstrap.php';
++	\Automattic\WooCommerce\Internal\LargeExport\Bootstrap::register();
++}
++
+ // Jetpack's Rest_Authentication needs to be initialized even before plugins_loaded.
+ if ( class_exists( \Automattic\Jetpack\Connection\Rest_Authentication::class ) ) {
+ 	\Automattic\Jetpack\Connection\Rest_Authentication::init();
+diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-bootstrap.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-bootstrap.php
+new file mode 100644
+index 00000000..7a5f9095
+--- /dev/null
++++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-bootstrap.php
+@@ -0,0 +1,36 @@
++<?php
++/**
++ * Opt-in bootstrap for the durable large product exporter.
++ *
++ * @package WooCommerce\Export
++ */
++
++namespace Automattic\WooCommerce\Internal\LargeExport;
++
++defined( 'ABSPATH' ) || exit;
++
++/**
++ * Load the isolated export subsystem only when explicitly enabled by wp-config.php.
++ */
++final class Bootstrap {
++	/**
++	 * Register background, admin, download, and CLI entry points.
++	 */
++	public static function register(): void {
++		if ( ! defined( 'WC_LARGE_PRODUCT_EXPORT' ) || true !== WC_LARGE_PRODUCT_EXPORT ) {
++			return;
++		}
++
++		require_once __DIR__ . '/class-store.php';
++		require_once __DIR__ . '/class-files.php';
++		require_once __DIR__ . '/class-reader.php';
++		require_once __DIR__ . '/class-engine.php';
++		require_once __DIR__ . '/class-command.php';
++		require_once __DIR__ . '/class-integration.php';
++
++		Integration::register();
++		if ( defined( 'WP_CLI' ) && WP_CLI ) {
++			\WP_CLI::add_hook( 'after_wp_load', array( Command::class, 'register' ) );
++		}
++	}
++}
+diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-command.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-command.php
+new file mode 100644
+index 00000000..f4f95a6e
+--- /dev/null
++++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-command.php
+@@ -0,0 +1,446 @@
++<?php
++/**
++ * Bounded WP-CLI operational commands for large product exports.
++ *
++ * @package WooCommerce\Export
++ */
++
++namespace Automattic\WooCommerce\Internal\LargeExport;
++
++use InvalidArgumentException;
++use RuntimeException;
++
++defined( 'ABSPATH' ) || exit;
++
++/**
++ * WP-CLI entry point for starting, observing and operating export jobs.
++ *
++ * ## EXAMPLES
++ *
++ *     wp wc export-large start --user=1
++ *     wp wc export-large run --job-id=UUID --seconds=10
++ *     wp wc export-large run --seconds=30
++ *     wp wc export-large status --job-id=UUID --format=json
++ *     wp wc export-large pause --job-id=UUID
++ *     wp wc export-large resume --job-id=UUID
++ *     wp wc export-large cancel --job-id=UUID
++ *     wp wc export-large retry --job-id=UUID
++ *     wp wc export-large verify --job-id=UUID
++ *
++ * @package WooCommerce\CLI
++ */
++final class Command {
++
++	/** @var Store */
++	private $store;
++
++	/** @var Files */
++	private $files;
++
++	/** @var Engine */
++	private $engine;
++
++	/**
++	 * Register this command if the environment provides WP-CLI.
++	 */
++	public static function register(): void {
++		if ( defined( 'WP_CLI' ) && WP_CLI ) {
++			\WP_CLI::add_command( 'wc export-large', self::class );
++		}
++	}
++
++	/**
++	 * Start a durable export job.
++	 *
++	 * ## OPTIONS
++	 *
++	 * [--user=<id>]
++	 * : Export owner. WP-CLI's --user global is used when this option is omitted.
++	 *
++	 * [--type=<products>]
++	 * : Export entity type. Only products are supported.
++	 *
++	 * [--mode=<mode>]
++	 * : Export query mode: compatibility (default) or opt-in keyset.
++	 *
++	 * [--file-format=<format>]
++	 * : Artifact format: csv (default) or resumable ZIP64 STORE (PHP 8+).
++	 *
++	 * [--meta]
++	 * : Include custom product metadata.
++	 *
++	 * [--columns=<columns>]
++	 * : Comma-separated product column identifiers.
++	 *
++	 * [--types=<types>]
++	 * : Comma-separated WooCommerce product types.
++	 *
++	 * [--categories=<categories>]
++	 * : Comma-separated product category slugs.
++	 *
++	 * [--ids=<ids>]
++	 * : Comma-separated product IDs, limited to 2000 per job.
++	 *
++	 * [--statuses=<statuses>]
++	 * : Comma-separated WooCommerce product statuses.
++	 *
++	 * [--spreadsheet]
++	 * : Enable spreadsheet formula protection.
++	 *
++	 * [--no-spreadsheet]
++	 * : Keep CSV cell values unchanged for product importer compatibility.
++	 *
++	 * [--bom]
++	 * : Add a UTF-8 BOM to the CSV output.
++	 *
++	 * [--no-bom]
++	 * : Omit the UTF-8 BOM.
++	 *
++	 * [--format=<format>]
++	 * : Output format: table or json.
++	 *
++	 * ## EXAMPLES
++	 *
++	 *     wp wc export-large start --user=1 --columns=id,sku,name
++	 *     wp wc export-large start --mode=compatibility --meta --format=json
++	 *
++	 * @param array $args       Positional arguments.
++	 * @param array $assoc_args Named arguments.
++	 */
++	public function start( array $args, array $assoc_args ): void {
++		$type = $assoc_args['type'] ?? 'products';
++		if ( 'products' !== $type ) {
++			\WP_CLI::error( 'Only product exports are supported.' );
++		}
++		$user = isset( $assoc_args['user'] ) ? absint( $assoc_args['user'] ) : get_current_user_id();
++		if ( ! Engine::allowed( $user ) ) {
++			\WP_CLI::error( 'The selected user must have edit_products and export capabilities.' );
++		}
++		try {
++			$job = $this->engine()->create(
++				$user,
++				array(
++					'mode'        => $assoc_args['mode'] ?? 'compatibility',
++					'format'      => $assoc_args['file-format'] ?? 'csv',
++					'meta'        => isset( $assoc_args['meta'] ),
++					'columns'     => $this->csv_list( $assoc_args['columns'] ?? '' ),
++					'types'       => $this->csv_list( $assoc_args['types'] ?? '' ),
++					'categories'  => $this->csv_list( $assoc_args['categories'] ?? '' ),
++					'ids'         => $this->integer_list( $assoc_args['ids'] ?? '' ),
++					'statuses'    => $this->csv_list( $assoc_args['statuses'] ?? '' ),
++					'spreadsheet' => \WP_CLI\Utils\get_flag_value( $assoc_args, 'spreadsheet', true ),
++					'bom'         => \WP_CLI\Utils\get_flag_value( $assoc_args, 'bom', true ),
++				)
++			);
++		} catch ( InvalidArgumentException $error ) {
++			\WP_CLI::error( $error->getMessage() );
++		} catch ( RuntimeException $error ) {
++			\WP_CLI::error( $error->getMessage() );
++		}
++		Integration::enqueue( $job['id'] );
++		$this->display( $job, $assoc_args['format'] ?? 'table' );
++	}
++
++	/**
++	 * Process a job for a bounded duration, or drain due work until the budget ends.
++	 *
++	 * ## OPTIONS
++	 *
++	 * [--job-id=<id>]
++	 * : Process one named job instead of scanning the bounded due queue.
++	 *
++	 * [--seconds=<seconds>]
++	 * : Maximum time budget, from 1 through 300 seconds. Defaults to 30.
++	 *
++	 * [--format=<format>]
++	 * : Output format: table or json.
++	 *
++	 * ## EXAMPLES
++	 *
++	 *     wp wc export-large run --job-id=UUID --seconds=20
++	 *     wp wc export-large run --seconds=30
++	 *
++	 * @param array $args       Positional arguments.
++	 * @param array $assoc_args Named arguments.
++	 */
++	public function run( array $args, array $assoc_args ): void {
++		$budget = $this->seconds( $assoc_args['seconds'] ?? 30 );
++		$single = isset( $assoc_args['job-id'] ) ? (string) $assoc_args['job-id'] : '';
++		if ( $single && ! $this->store()->get( $single ) ) {
++			\WP_CLI::error( 'The export job does not exist.' );
++		}
++		$started = microtime( true );
++		$results = array();
++		do {
++			$ids = $single ? array( $single ) : $this->store()->due();
++			if ( ! $ids ) {
++				break;
++			}
++			$worked = false;
++			foreach ( $ids as $id ) {
++				$before         = $this->store()->get( $id );
++				$job            = $this->engine()->run( $id, min( 6, $budget ) );
++				$results[ $id ] = $job;
++				$worked         = $worked || ( $before && $job && $before['revision'] !== $job['revision'] );
++				if ( microtime( true ) - $started >= $budget ) {
++					break 2;
++				}
++			}
++			if ( ! $worked ) {
++				break;
++			}
++		} while ( microtime( true ) - $started < $budget );
++
++		if ( ! $results ) {
++			if ( 'json' === ( $assoc_args['format'] ?? 'table' ) ) {
++				\WP_CLI::line( '[]' );
++			} else {
++				\WP_CLI::log( 'No due export jobs.' );
++			}
++			return;
++		}
++		$output = array_map( array( $this, 'summary' ), array_values( $results ) );
++		$this->display_many( $output, $assoc_args['format'] ?? 'table' );
++		foreach ( $results as $result ) {
++			if ( $result && 'failed' === $result['status'] ) {
++				\WP_CLI::halt( 1 );
++			}
++		}
++	}
++
++	/**
++	 * Display one job and its real persisted progress.
++	 *
++	 * ## OPTIONS
++	 *
++	 * --job-id=<id>
++	 * : Job to inspect.
++	 *
++	 * [--format=<format>]
++	 * : Output format: table or json.
++	 *
++	 * @param array $args       Positional arguments.
++	 * @param array $assoc_args Named arguments.
++	 */
++	public function status( array $args, array $assoc_args ): void {
++		$this->display( $this->required( $assoc_args ), $assoc_args['format'] ?? 'table' );
++	}
++
++	/** Pause an export after its current storage unit. */
++	public function pause( array $args, array $assoc_args ): void {
++		$this->operate( $assoc_args, 'pause' );
++	}
++
++	/** Resume an export from its last committed checkpoint. */
++	public function resume( array $args, array $assoc_args ): void {
++		$this->operate( $assoc_args, 'resume' );
++	}
++
++	/** Cancel an export and remove its private temporary files. */
++	public function cancel( array $args, array $assoc_args ): void {
++		$this->operate( $assoc_args, 'cancel' );
++	}
++
++	/** Retry a job that exhausted its automatic retry budget. */
++	public function retry( array $args, array $assoc_args ): void {
++		$this->operate( $assoc_args, 'retry' );
++	}
++
++	/** Remove a bounded page of expired private artifacts (CLI-only retention timer). */
++	public function cleanup( array $args, array $assoc_args ): void {
++		$this->engine()->sweep();
++		\WP_CLI::success( 'The bounded export retention pass completed.' );
++	}
++
++	/**
++	 * Confirm that a completed artifact matches its checkpoint's byte count and SHA-256.
++	 *
++	 * ## OPTIONS
++	 *
++	 * --job-id=<id>
++	 * : Completed job to verify.
++	 *
++	 * [--format=<format>]
++	 * : Output format: table or json.
++	 *
++	 * @param array $args       Positional arguments.
++	 * @param array $assoc_args Named arguments.
++	 */
++	public function verify( array $args, array $assoc_args ): void {
++		$job = $this->required( $assoc_args );
++		if ( 'completed' !== $job['status'] || empty( $job['checkpoint']['checksum'] ) ) {
++			\WP_CLI::error( 'Only a completed export with a verified checksum can be checked.' );
++		}
++		try {
++			$extension  = 'zip' === ( $job['config']['format'] ?? 'csv' ) ? 'zip' : 'csv';
++			$checkpoint = 'zip' === $extension ? $job['checkpoint']['archive'] : $job['checkpoint'];
++			$path       = $this->files()->path( $job['id'], $extension, $checkpoint );
++			$bytes      = filesize( $path );
++			$algorithm  = (string) $checkpoint['checksum_algorithm'];
++			$expected   = (string) $checkpoint['checksum'];
++			if ( 'sha256' === $algorithm ) {
++				$hash = hash_file( 'sha256', $path );
++			} else {
++				// Recompute every segment on PHP 7.4; never compare a stored digest to itself.
++				$checked = $checkpoint;
++				unset( $checked['checksum'], $checked['verify_context'], $checked['verify_format'] );
++				do {
++					$checked = $this->files()->verify( $job['id'], $checked, $extension );
++				} while ( ! isset( $checked['checksum'] ) );
++				$hash = $checked['checksum'];
++			}
++		} catch ( RuntimeException $error ) {
++			\WP_CLI::error( 'The completed export file cannot be read.' );
++		}
++		$expected_bytes = (int) ( $checkpoint['final_bytes'] ?? -1 );
++		$valid          = false !== $bytes && false !== $hash && $expected_bytes === $bytes && hash_equals( $expected, $hash );
++		$result         = array(
++			'id'        => $job['id'],
++			'verified'  => $valid,
++			'bytes'     => $bytes,
++			'algorithm' => $algorithm,
++			'checksum'  => $hash,
++		);
++		if ( 'json' === ( $assoc_args['format'] ?? 'table' ) ) {
++			\WP_CLI::line( wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
++		} else {
++			\WP_CLI::log( $valid ? 'Export checksum and file size match.' : 'Export checksum or file size does not match.' );
++			\WP_CLI\Utils\format_items( 'table', array( $result ), array( 'id', 'verified', 'bytes', 'algorithm', 'checksum' ) );
++		}
++		if ( ! $valid ) {
++			\WP_CLI::halt( 1 );
++		}
++	}
++
++	/**
++	 * Apply a guarded state change to one job.
++	 *
++	 * @param array  $assoc_args Command arguments.
++	 * @param string $action     Store control action.
++	 */
++	private function operate( array $assoc_args, string $action ): void {
++		$job = $this->required( $assoc_args );
++		if ( ! current_user_can( 'manage_options' ) && get_current_user_id() !== (int) $job['user_id'] ) {
++			\WP_CLI::error( "You cannot control another user's export job." );
++		}
++		try {
++			$job = $this->store()->control( $job['id'], $action );
++		} catch ( InvalidArgumentException $error ) {
++			\WP_CLI::error( $error->getMessage() );
++		} catch ( RuntimeException $error ) {
++			\WP_CLI::error( $error->getMessage() );
++		}
++		if ( in_array( $job['status'], Engine::ACTIVE, true ) ) {
++			Integration::enqueue( $job['id'], max( 0, (int) $job['available_at'] - time() ) );
++		}
++		$this->display( $job, $assoc_args['format'] ?? 'table' );
++	}
++
++	/**
++	 * Resolve a job or report a concise CLI error.
++	 *
++	 * @param array $assoc_args Command arguments.
++	 * @return array
++	 */
++	private function required( array $assoc_args ): array {
++		$id  = (string) ( $assoc_args['job-id'] ?? '' );
++		$job = $id ? $this->store()->get( $id ) : null;
++		if ( ! $job ) {
++			\WP_CLI::error( 'Provide a valid --job-id for an existing export job.' );
++		}
++		if ( ! current_user_can( 'manage_options' ) && get_current_user_id() !== (int) $job['user_id'] ) {
++			\WP_CLI::error( "You cannot view another user's export job." );
++		}
++		return $job;
++	}
++
++	/**
++	 * Print a single summary in the requested format.
++	 *
++	 * @param array  $job    Job row.
++	 * @param string $format Output format.
++	 */
++	private function display( array $job, string $format ): void {
++		$this->display_many( array( $this->summary( $job ) ), $format );
++	}
++
++	/**
++	 * Print a bounded set of summaries.
++	 *
++	 * @param array  $summaries Summaries to print.
++	 * @param string $format    Output format.
++	 */
++	private function display_many( array $summaries, string $format ): void {
++		if ( ! in_array( $format, array( 'table', 'json' ), true ) ) {
++			\WP_CLI::error( 'Output format must be table or json.' );
++		}
++		if ( 'json' === $format ) {
++			\WP_CLI::line( wp_json_encode( count( $summaries ) === 1 ? $summaries[0] : $summaries, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
++			return;
++		}
++		$rows = array_map(
++			static function ( array $summary ): array {
++				unset( $summary['logs'] );
++				return $summary;
++			},
++			$summaries
++		);
++		\WP_CLI\Utils\format_items( 'table', $rows, array( 'id', 'status', 'rows', 'estimate', 'progress', 'rate', 'eta', 'elapsed', 'batch', 'bytes', 'attempts', 'last_error' ) );
++	}
++
++	/**
++	 * Return the engine's persisted status summary.
++	 *
++	 * @param array $job Job row.
++	 * @return array
++	 */
++	public function summary( array $job ): array {
++		return Engine::summary( $job );
++	}
++
++	private function store(): Store {
++		if ( ! $this->store ) {
++			$this->store = new Store();
++			$this->store->install();
++		}
++		return $this->store;
++	}
++
++	private function files(): Files {
++		if ( ! $this->files ) {
++			$this->files = new Files();
++		}
++		return $this->files;
++	}
++
++	private function engine(): Engine {
++		if ( ! $this->engine ) {
++			$this->engine = new Engine( $this->store(), $this->files() );
++		}
++		return $this->engine;
++	}
++
++	private function csv_list( string $value ): array {
++		return '' === trim( $value ) ? array() : array_map( 'trim', explode( ',', $value ) );
++	}
++
++	private function integer_list( string $value ): array {
++		if ( '' === trim( $value ) ) {
++			return array();
++		}
++		$values = $this->csv_list( $value );
++		foreach ( $values as $id ) {
++			if ( ! ctype_digit( $id ) || (int) $id < 1 ) {
++				throw new InvalidArgumentException( 'Product IDs must be positive integers.' );
++			}
++		}
++		return array_map( 'intval', $values );
++	}
++
++	private function seconds( $value ): int {
++		if ( ! is_numeric( $value ) || (int) $value < 1 || (int) $value > 300 ) {
++			\WP_CLI::error( 'The --seconds value must be from 1 through 300.' );
++		}
++		return (int) $value;
++	}
++}
+diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php
+new file mode 100644
+index 00000000..39cf01a1
+--- /dev/null
++++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php
+@@ -0,0 +1,451 @@
++<?php
++/**
++ * Bounded export worker and immutable job configuration.
++ *
++ * @package WooCommerce\Export
++ */
++
++namespace Automattic\WooCommerce\Internal\LargeExport;
++
++use InvalidArgumentException;
++use RuntimeException;
++use Throwable;
++
++defined( 'ABSPATH' ) || exit;
++
++final class Engine {
++	public const STATUSES = array( 'private', 'publish', 'draft', 'future', 'pending' );
++	public const ACTIVE   = array( 'pending', 'queued', 'running', 'pausing', 'finalizing', 'verifying', 'cancelling' );
++
++	/** @var Store */
++	private $store;
++
++	/** @var Files */
++	private $files;
++
++	public function __construct( Store $store, Files $files ) {
++		$this->store = $store;
++		$this->files = $files;
++	}
++
++	public static function allowed( int $user ): bool {
++		return $user > 0 && user_can( $user, 'edit_products' ) && user_can( $user, 'export' );
++	}
++
++	public function create( int $user, array $options ): array {
++		if ( ! self::allowed( $user ) ) {
++			throw new InvalidArgumentException( 'Insufficient privileges to export products.' );
++		}
++		if ( ! self::read_only_supported() ) {
++			throw new InvalidArgumentException( 'Large export requires the read-only variation data-store patch. Reapply the verified core patch.' );
++		}
++		if ( ! wp_cache_supports( 'flush_runtime' ) ) {
++			throw new InvalidArgumentException( 'Large export requires request-local object-cache flushing. Configure a compatible cache drop-in.' );
++		}
++		require_once __DIR__ . '/class-reader.php';
++		if ( has_filter( 'woocommerce_product_export_rows' ) ) {
++			throw new InvalidArgumentException( 'An extension transforms whole CSV batches. Use the legacy exporter for that extension.' );
++		}
++
++		$config = array(
++			'version'     => 1,
++			'mode'        => $options['mode'] ?? 'compatibility',
++			'format'      => $options['format'] ?? 'csv',
++			'columns'     => self::strings( $options['columns'] ?? array(), 1000 ),
++			'types'       => self::strings( $options['types'] ?? array(), 100 ),
++			'categories'  => array_map( 'sanitize_title_with_dashes', self::strings( $options['categories'] ?? array(), 500 ) ),
++			'ids'         => array(),
++			'statuses'    => self::strings( $options['statuses'] ?? array(), count( self::STATUSES ) ),
++			'meta'        => ! empty( $options['meta'] ),
++			'bom'         => ! isset( $options['bom'] ) || (bool) $options['bom'],
++			'spreadsheet' => ! isset( $options['spreadsheet'] ) || (bool) $options['spreadsheet'],
++			'estimate'    => ! isset( $options['estimate'] ) || (bool) $options['estimate'],
++			'consistency' => 'live',
++		);
++		if ( ! in_array( $config['mode'], array( 'keyset', 'compatibility' ), true ) ) {
++			throw new InvalidArgumentException( 'Unknown export mode.' );
++		}
++		if ( ! in_array( $config['format'], array( 'csv', 'zip' ), true ) ) {
++			throw new InvalidArgumentException( 'Unknown export file format.' );
++		}
++		if ( 'zip' === $config['format'] && ! method_exists( \HashContext::class, '__serialize' ) ) {
++			throw new InvalidArgumentException( 'Resumable ZIP64 packaging requires PHP 8.0 or newer. Choose CSV on PHP 7.4.' );
++		}
++		$available_types = \WC_Admin_Exporters::get_product_types();
++		if ( array_diff( $config['types'], array_keys( $available_types ) ) || array_diff( $config['statuses'], self::STATUSES ) ) {
++			throw new InvalidArgumentException( 'Invalid product type or status.' );
++		}
++		$config['types']          = $config['types'] ? $config['types'] : array_keys( $available_types );
++		$config['statuses']       = $config['statuses'] ? $config['statuses'] : self::STATUSES;
++		$config['child_statuses'] = empty( $options['statuses'] ) ? ( new \WC_Product_Query() )->get( 'status' ) : $config['statuses'];
++		$ids                      = $options['ids'] ?? array();
++		if ( ! is_array( $ids ) || count( $ids ) > 2000 ) {
++			throw new InvalidArgumentException( 'Select at most 2000 product IDs per job.' );
++		}
++		foreach ( $ids as $id ) {
++			if ( ( ! is_int( $id ) && ! is_string( $id ) ) || ! ctype_digit( (string) $id ) || (int) $id <= 0 ) {
++				throw new InvalidArgumentException( 'Invalid product ID.' );
++			}
++			$config['ids'][ (int) $id ] = (int) $id;
++		}
++		$config['ids'] = array_values( $config['ids'] );
++		if ( isset( $options['request_id'] ) ) {
++			if ( ! is_string( $options['request_id'] ) || ! preg_match( '/^[a-zA-Z0-9_-]{16,128}$/D', $options['request_id'] ) ) {
++				throw new InvalidArgumentException( 'Invalid request ID.' );
++			}
++			$config['request_id'] = $options['request_id'];
++		}
++
++		$config['batch_min'] = max( 1, min( 1000, (int) apply_filters( 'woocommerce_large_export_batch_min', 100 ) ) );
++		$config['batch_max'] = max( $config['batch_min'], min( 2000, (int) apply_filters( 'woocommerce_large_export_batch_max', 2000 ) ) );
++		$config['batch']     = max( $config['batch_min'], min( $config['batch_max'], (int) apply_filters( 'woocommerce_large_export_batch_initial', 500 ) ) );
++		$reader              = new Reader( $config );
++		// Freeze the insertion boundary at job creation, including when the first
++		// worker is not scheduled until later. This is not a transactional snapshot.
++		$config['source'] = $reader->source_boundary();
++		$delimiter        = $reader->get_delimiter();
++		if ( ! is_string( $delimiter ) || 1 !== strlen( $delimiter ) || false !== strpos( "\r\n\"\0", $delimiter ) ) {
++			throw new InvalidArgumentException( 'Invalid CSV delimiter.' );
++		}
++		$config['delimiter'] = $delimiter;
++		$this->files->capacity();
++		$this->store->install();
++		return $this->store->create( $user, $config );
++	}
++
++	private static function strings( $values, int $maximum ): array {
++		if ( ! is_array( $values ) || count( $values ) > $maximum ) {
++			throw new InvalidArgumentException( 'Invalid export selection.' );
++		}
++		$result = array();
++		foreach ( $values as $value ) {
++			if ( ! is_string( $value ) || strlen( $value ) > 250 || '' === $value ) {
++				throw new InvalidArgumentException( 'Invalid export selection.' );
++			}
++			$result[] = wc_clean( $value );
++		}
++		return array_values( array_unique( $result ) );
++	}
++
++	/**
++	 * Process as many complete units as fit in a budget. One unit may outlast
++	 * the budget if a database query or storage operation stalls.
++	 */
++	public function run( string $id, int $seconds = 6 ): ?array {
++		$lock = $this->files->lock();
++		if ( ! $lock ) {
++			return $this->store->get( $id );
++		}
++		$job           = null;
++		$read_only     = null;
++		$previous_user = get_current_user_id();
++		try {
++			$job = $this->store->claim( $id );
++			if ( ! $job ) {
++				return $this->store->get( $id );
++			}
++			wp_set_current_user( (int) $job['user_id'] );
++			$read_only = static function () {
++				return false;
++			};
++			add_filter( 'woocommerce_product_variation_update_title_on_read', $read_only, PHP_INT_MAX );
++			$deadline = microtime( true ) + max( 1, min( 300, $seconds ) );
++			do {
++				$start = microtime( true );
++				$this->unit( $job );
++				$job = $this->store->get( $id );
++				if ( $job && ! in_array( $job['status'], array( 'cancelling', 'cancelled', 'expired' ), true ) ) {
++					$this->files->manifest( $job );
++				}
++				if ( ! $job || ! in_array( $job['status'], self::ACTIVE, true ) ) {
++					break;
++				}
++				if ( wp_cache_supports( 'flush_runtime' ) ) {
++					wp_cache_flush_runtime();
++				}
++				if ( function_exists( 'gc_collect_cycles' ) ) {
++					gc_collect_cycles();
++				}
++				$throttle = max( 0, min( 500, (int) apply_filters( 'woocommerce_large_export_throttle_ms', 25 ) ) );
++				if ( $throttle ) {
++					usleep( $throttle * 1000 );
++				}
++			} while ( microtime( true ) + ( microtime( true ) - $start ) < $deadline );
++		} catch ( Throwable $error ) {
++			if ( ! $job ) {
++				throw $error;
++			}
++			// Exception messages from third-party hooks may contain row data or credentials.
++			$message = get_class( $error ) === RuntimeException::class && in_array( $error->getMessage(), self::public_errors(), true )
++				? $error->getMessage() : 'A worker unit failed. Check private storage and database availability, then review export compatibility.';
++			$this->store->failure( $job, $message );
++		} finally {
++			try {
++				if ( $job ) {
++					$this->store->release( $job );
++				}
++			} finally {
++				if ( $read_only ) {
++					remove_filter( 'woocommerce_product_variation_update_title_on_read', $read_only, PHP_INT_MAX );
++				}
++				wp_set_current_user( $previous_user );
++				fclose( $lock );
++			}
++		}
++		return $this->store->get( $id );
++	}
++
++	private static function public_errors(): array {
++		return array(
++			'Large export requires the read-only variation data-store patch. Reapply the verified core patch.',
++			'Large export requires request-local object-cache flushing. Configure a compatible cache drop-in.',
++			'The export owner no longer has export privileges.',
++			'An extension transforms whole CSV batches. Use the legacy exporter for that extension.',
++			'The product query order changed during export. Start a new export.',
++			'The product query page size changed during export. Start a new export.',
++			'The product data store changed. Start a new export.',
++			'The product export query changed while the job was running. Start a new export.',
++			'The product database query failed.',
++			'A product query override does not support bounded background export. Use the legacy exporter.',
++			'The product query returned unexpected IDs. Use the compatibility mode or legacy exporter.',
++			'The export exceeded the supported number of CSV columns.',
++			'No CSV columns are selected for this export.',
++			'The export schema has changed. Start a new export.',
++			'Insufficient free space in large export storage.',
++			'An export file write could not complete.',
++			'The product ID watermark could not be read.',
++			'The finalized CSV record count does not match the committed export chunks.',
++			'The export size does not match the verification checkpoint.',
++			'The CSV verification proof is invalid.',
++			'The CSV verification segment size is invalid.',
++			'The CSV failed verification.',
++		);
++	}
++
++	private function unit( array $job ): void {
++		$id     = $job['id'];
++		$config = $job['config'];
++		$state  = $job['checkpoint'];
++		if ( 'cancelling' === $job['status'] ) {
++			if ( $this->files->purge( $id ) ) {
++				$this->store->save( $job, array( 'status' => 'cancelled' ) );
++			} else {
++				$this->store->save( $job, array( 'checkpoint' => $state ) );
++			}
++			return;
++		}
++		if ( 'pausing' === $job['status'] ) {
++			$this->store->save( $job, array( 'status' => 'paused' ) );
++			return;
++		}
++		if ( ! self::allowed( (int) $job['user_id'] ) ) {
++			throw new RuntimeException( 'The export owner no longer has export privileges.' );
++		}
++		if ( 1 !== ( $config['version'] ?? null ) ) {
++			throw new RuntimeException( 'The export schema has changed. Start a new export.' );
++		}
++		if ( 'finalizing' === $job['status'] ) {
++			$state = $this->files->finalize( $id, $state, $config );
++			do_action( 'woocommerce_large_export_finalize_written', $id, $state['final_index'] );
++			$finished = isset( $state['final_bytes'] ) && $state['index'] === $state['final_index'];
++			if ( $finished && (int) ( $state['final_rows'] ?? -1 ) !== (int) ( $state['rows'] ?? -2 ) ) {
++				throw new RuntimeException( 'The finalized CSV record count does not match the committed export chunks.' );
++			}
++			$status = $finished ? 'verifying' : 'finalizing';
++			$this->store->save(
++				$job,
++				array(
++					'checkpoint' => $state,
++					'status'     => $status,
++				)
++			);
++			return;
++		}
++		if ( 'verifying' === $job['status'] ) {
++			if ( ! isset( $state['checksum'] ) ) {
++				$state = $this->files->verify( $id, $state );
++			} elseif ( 'zip' === ( $config['format'] ?? 'csv' ) ) {
++				if ( empty( $state['archive']['finished'] ) ) {
++					$state['archive'] = $this->files->package( $id, $state );
++				} else {
++					$state['archive'] = $this->files->verify( $id, $state['archive'], 'zip' );
++				}
++			}
++			$verified = isset( $state['checksum'] ) && ( 'zip' !== ( $config['format'] ?? 'csv' ) || isset( $state['archive']['checksum'] ) );
++			$status   = $verified ? 'completed' : 'verifying';
++			$this->store->save(
++				$job,
++				array(
++					'checkpoint' => $state,
++					'status'     => $status,
++				)
++			);
++			return;
++		}
++
++		if ( ! self::read_only_supported() ) {
++			throw new RuntimeException( 'Large export requires the read-only variation data-store patch. Reapply the verified core patch.' );
++		}
++		if ( ! wp_cache_supports( 'flush_runtime' ) ) {
++			throw new RuntimeException( 'Large export requires request-local object-cache flushing. Configure a compatible cache drop-in.' );
++		}
++		require_once __DIR__ . '/class-reader.php';
++		if ( has_filter( 'woocommerce_product_export_rows' ) ) {
++			throw new RuntimeException( 'An extension transforms whole CSV batches. Use the legacy exporter for that extension.' );
++		}
++		$reader = new Reader( $config );
++		if ( ! $state ) {
++			$state          = $reader->initialize( $config );
++			$state['batch'] = $config['batch'];
++			$this->store->save( $job, array( 'checkpoint' => $state ) );
++			return;
++		}
++		// Legacy AJAX carries discovered column names between requests. Restore
++		// that context too, so late custom-column getters run in later chunks.
++		$reader->set_column_names( $state['raw_columns'] ?? ( $reader->get_column_names() + $state['columns'] ) );
++
++		$start       = microtime( true );
++		$query_count = get_num_queries();
++		$batch       = 'compatibility' === $state['mode'] ? $config['batch'] : $state['batch'];
++		$reader->set_limit( $batch );
++		$reader->set_page( $state['page'] );
++		$batch = max( 1, min( $batch, (int) $reader->get_limit() ) );
++		list( $products, $state, $finished, $query_time ) = $reader->select( $config, $state, $batch );
++		if ( $finished ) {
++			if ( ! $state['columns'] ) {
++				throw new RuntimeException( 'No CSV columns are selected for this export.' );
++			}
++			$this->store->save(
++				$job,
++				array(
++					'checkpoint' => $state,
++					'status'     => 'finalizing',
++				)
++			);
++			return;
++		}
++
++		$written    = array(
++			'rows'  => 0,
++			'bytes' => 0,
++		);
++		$write_time = 0.0;
++		if ( $products ) {
++			$write_start = microtime( true );
++			// The database checkpoint is authoritative. If a worker died after an
++			// atomic chunk rename but before saving this index, safely replace that
++			// uncommitted chunk instead of appending duplicate rows.
++			$this->files->discard_uncommitted_chunk( $id, (int) $state['index'] );
++			$written = $this->files->write_chunk( $id, $state['index'], $reader->rows( $products ) );
++			do_action( 'woocommerce_large_export_chunk_written', $id, $state['index'] );
++			$write_time = microtime( true ) - $write_start;
++			++$state['index'];
++			$state['rows']       += $written['rows'];
++			$state['bytes']      += $written['bytes'];
++			$state['columns']    += $reader->columns();
++			$state['raw_columns'] = $reader->get_column_names();
++			if ( count( $state['columns'] ) > 10000 || count( $state['raw_columns'] ) > 10000 ) {
++				throw new RuntimeException( 'The export exceeded the supported number of CSV columns.' );
++			}
++		}
++
++		$elapsed                   = max( 0.001, microtime( true ) - $start );
++		$rate                      = $written['rows'] / $elapsed;
++		$state['rate']             = round( isset( $state['rate'] ) ? 0.85 * $state['rate'] + 0.15 * $rate : $rate, 2 );
++		$state['peak_memory']      = max( $state['peak_memory'] ?? 0, memory_get_peak_usage( true ) );
++		$state['unit_count']       = ( $state['unit_count'] ?? 0 ) + 1;
++		$state['unit_seconds']     = ( $state['unit_seconds'] ?? 0.0 ) + $elapsed;
++		$state['unit_max_seconds'] = max( $state['unit_max_seconds'] ?? 0.0, $elapsed );
++		$samples                   = array_slice( $state['unit_samples'] ?? array(), -127 );
++		$samples[]                 = round( $elapsed, 3 );
++		$state['unit_samples']     = $samples;
++		$state['query_seconds']    = ( $state['query_seconds'] ?? 0.0 ) + $query_time;
++		$state['write_seconds']    = ( $state['write_seconds'] ?? 0.0 ) + $write_time;
++		$state['queries']          = ( $state['queries'] ?? 0 ) + get_num_queries() - $query_count;
++		if ( 'keyset' === $state['mode'] ) {
++			$memory_limit    = wp_convert_hr_to_bytes( ini_get( 'memory_limit' ) );
++			$memory_limit    = $memory_limit > 0 ? $memory_limit : 256 * 1024 * 1024;
++			$memory_pressure = memory_get_usage( true ) >= (int) ( $memory_limit * 0.70 );
++			if ( $elapsed > 2 || $query_time > 1 || $write_time > 1 || $memory_pressure ) {
++				$state['batch'] = max( $config['batch_min'], (int) ( $batch * 0.7 ) );
++			} elseif ( $elapsed < 0.6 && $written['rows'] >= $batch ) {
++				$state['batch'] = min( $config['batch_max'], max( $batch + 1, (int) ( $batch * 1.2 ) ) );
++			}
++		}
++		$this->store->save( $job, array( 'checkpoint' => $state ) );
++	}
++
++	public function sweep(): void {
++		$lock = $this->files->lock();
++		if ( ! $lock ) {
++			return;
++		}
++		try {
++			foreach ( $this->store->expires() as $id ) {
++				do_action( 'woocommerce_large_export_before_expire', $id );
++				try {
++					// Fence operator retry before removing any files. A retry that wins
++					// the revision race must keep its valid checkpoint and chunks.
++					$this->store->control( $id, 'expire' );
++				} catch ( InvalidArgumentException $error ) {
++					continue;
++				}
++				if ( $this->files->purge( $id ) ) {
++					$this->store->control( $id, 'purged' );
++				}
++			}
++		} finally {
++			fclose( $lock );
++		}
++	}
++
++	private static function read_only_supported(): bool {
++		return class_exists( 'WC_Product_Variation_Data_Store_CPT' ) &&
++			defined( 'WC_Product_Variation_Data_Store_CPT::LARGE_EXPORT_READ_ONLY_VERSION' ) &&
++			1 === \WC_Product_Variation_Data_Store_CPT::LARGE_EXPORT_READ_ONLY_VERSION;
++	}
++
++	public static function summary( array $job ): array {
++		$state    = $job['checkpoint'];
++		$rate     = $state['rate'] ?? 0;
++		$rows     = $state['rows'] ?? 0;
++		$total    = $state['estimate'] ?? null;
++		$progress = $total ? min( 99, (int) floor( 100 * $rows / $total ) ) : null;
++		$samples  = $state['unit_samples'] ?? array();
++		sort( $samples, SORT_NUMERIC );
++		$p95          = $samples ? $samples[ (int) ceil( count( $samples ) * 0.95 ) - 1 ] : null;
++		$average_unit = empty( $state['unit_count'] ) ? null : $state['unit_seconds'] / $state['unit_count'];
++		$artifact     = 'zip' === ( $job['config']['format'] ?? 'csv' ) ? ( $state['archive'] ?? array() ) : $state;
++		if ( 'completed' === $job['status'] ) {
++			$progress = 100;
++		}
++		return array(
++			'id'                          => $job['id'],
++			'status'                      => $job['status'],
++			'mode'                        => $state['mode'] ?? $job['config']['mode'],
++			'format'                      => $job['config']['format'] ?? 'csv',
++			'rows'                        => $rows,
++			'estimate'                    => $total,
++			'progress'                    => $progress,
++			'rate'                        => $rate,
++			'eta'                         => $total && $rate > 0 && $total > $rows && 'running' === $job['status'] ? (int) ceil( ( $total - $rows ) / $rate ) : null,
++			'elapsed'                     => empty( $job['started_at'] ) ? 0 : max( 0, ( $job['completed_at'] ? $job['completed_at'] : time() ) - $job['started_at'] ),
++			'batch'                       => $state['batch'] ?? $job['config']['batch'],
++			// Chunk JSON byte counts are staging usage, not the finalized CSV size.
++			'bytes'                       => $artifact['final_bytes'] ?? 0,
++			'staging_bytes'               => $state['bytes'] ?? 0,
++			'database_queries'            => $state['queries'] ?? 0,
++			'database_seconds'            => round( $state['query_seconds'] ?? 0, 3 ),
++			'writer_seconds'              => round( $state['write_seconds'] ?? 0, 3 ),
++			'peak_memory_bytes'           => $state['peak_memory'] ?? 0,
++			'work_units'                  => $state['unit_count'] ?? 0,
++			'avg_unit_seconds'            => null === $average_unit ? null : round( $average_unit, 3 ),
++			'p95_recent_128_unit_seconds' => null === $p95 ? null : round( $p95, 3 ),
++			'max_unit_seconds'            => round( $state['unit_max_seconds'] ?? 0, 3 ),
++			'checksum'                    => $artifact['checksum'] ?? null,
++			'attempts'                    => $job['attempts'],
++			'last_error'                  => $job['last_error'],
++			'logs'                        => $job['logs'] ?? array(),
++		);
++	}
++}
+diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-files.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-files.php
+new file mode 100644
+index 00000000..ab62dfa2
+--- /dev/null
++++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-files.php
+@@ -0,0 +1,828 @@
++<?php
++/**
++ * Durable private files for the background product exporter.
++ *
++ * @package WooCommerce\Export
++ */
++
++namespace Automattic\WooCommerce\Internal\LargeExport;
++
++use DirectoryIterator;
++use HashContext;
++use RuntimeException;
++
++defined( 'ABSPATH' ) || exit;
++
++/**
++ * Writes keyed row chunks, builds an aligned CSV and verifies it before publication.
++ *
++ * Call mutations while holding the site writer lock. The job store checkpoint is
++ * authoritative: an uncommitted chunk is replaceable and uncommitted CSV bytes
++ * are truncated before the next append.
++ */
++final class Files {
++	private const RESERVE_BYTES = 64 * 1024 * 1024;
++	private const SEGMENT_BYTES = 8 * 1024 * 1024;
++	private const RECORD_BYTES  = 76; // 10 decimal digits, space, hex SHA-256, newline.
++	private const MAX_ROW_BYTES = 32 * 1024 * 1024;
++
++	/** @var string Canonical private base. */
++	private $root;
++
++	/** @var string Name of this site's storage directory. */
++	private $site;
++
++	/**
++	 * Validate the configured location and calculate an installation-specific directory.
++	 */
++	public function __construct() {
++		if ( PHP_INT_SIZE < 8 || ! defined( 'WC_LARGE_EXPORT_DIR' ) || ! is_string( WC_LARGE_EXPORT_DIR ) ) {
++			throw new RuntimeException( 'Large export requires 64-bit PHP and a configured private storage directory.' );
++		}
++
++		$root = rtrim( str_replace( '\\', '/', WC_LARGE_EXPORT_DIR ), '/' );
++		if ( ( '/' !== substr( $root, 0, 1 ) && ! preg_match( '~\A[A-Za-z]:/~', $root ) )
++			|| '//' === substr( $root, 0, 2 )
++			|| preg_match( '~(?:^|/)\.{1,2}(?:/|$)|[\x00-\x1f]~', $root ) ) {
++			throw new RuntimeException( 'Large export storage needs a canonical absolute local path.' );
++		}
++
++		$canonical = realpath( $root );
++		if ( false === $canonical || ! is_dir( $canonical ) || self::normalized( $root ) !== self::normalized( $canonical ) ) {
++			throw new RuntimeException( 'Large export storage must be an existing directory with no symlink in its path.' );
++		}
++		for ( $part = $root; dirname( $part ) !== $part; $part = dirname( $part ) ) {
++			if ( is_link( $part ) ) {
++				throw new RuntimeException( 'Large export storage cannot use a symlink.' );
++			}
++		}
++
++		$uploads   = wp_get_upload_dir();
++		$public    = array( ABSPATH, WP_CONTENT_DIR, $uploads['basedir'], $_SERVER['DOCUMENT_ROOT'] ?? '' );
++		$root_path = self::normalized( $canonical );
++		foreach ( $public as $dir ) {
++			if ( '' === $dir ) {
++				continue;
++			}
++			$real_dir = realpath( $dir );
++			$path     = self::normalized( false === $real_dir ? $dir : $real_dir );
++			if ( $root_path === $path || 0 === strpos( $root_path, $path . '/' ) ) {
++				throw new RuntimeException( 'Large export storage must be outside the webroot, WordPress and uploads.' );
++			}
++		}
++
++		global $wpdb;
++		$this->root = $canonical;
++		$this->site = 'wc-products-' . substr( hash( 'sha256', DB_NAME . '|' . $wpdb->prefix . '|' . self::normalized( ABSPATH ) ), 0, 24 );
++		$this->ensure_directory( $this->site_dir() );
++	}
++
++	/**
++	 * Claim a nonblocking writer lock across all jobs in this installation.
++	 *
++	 * @return resource|null Close the stream to release the lock.
++	 */
++	public function lock() {
++		$stream = $this->open( $this->site_dir() . '/writer.lock', 'c+b' );
++		if ( ! flock( $stream, LOCK_EX | LOCK_NB, $would_block ) ) {
++			fclose( $stream );
++			if ( $would_block ) {
++				return null;
++			}
++			throw new RuntimeException( 'The private filesystem does not provide the required writer lock.' );
++		}
++		return $stream;
++	}
++
++	/**
++	 * Check space before writing to the private volume.
++	 *
++	 * @param int $bytes Additional expected usage, if known.
++	 */
++	public function capacity( int $bytes = 0 ): void {
++		$root      = $this->root;
++		$available = self::io(
++			static function () use ( $root ) {
++				return disk_free_space( $root );
++			}
++		);
++		if ( false === $available || $available < self::RESERVE_BYTES + max( 0, $bytes ) ) {
++			throw new RuntimeException( 'Insufficient free space in large export storage.' );
++		}
++	}
++
++	/**
++	 * Mirror committed database state for operators. The DB remains authoritative;
++	 * this bounded manifest can always be regenerated after a crash between commits.
++	 *
++	 * @param array $job Persisted job, excluding row data.
++	 */
++	public function manifest( array $job ): void {
++		$dir    = $this->job_dir( $job['id'], true );
++		$data   = json_encode(
++			array(
++				'schema_version' => 1,
++				'job_id'         => $job['id'],
++				'status'         => $job['status'],
++				'revision'       => $job['revision'],
++				'updated_at'     => $job['updated_at'],
++				'config'         => $job['config'],
++				'checkpoint'     => $job['checkpoint'],
++			),
++			JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
++		);
++		$path   = $dir . '/manifest.json';
++		$stream = $this->open( $path . '.tmp', 'c+b' );
++		try {
++			$this->position( $stream, 0 );
++			$this->write_all( $stream, $data );
++			$this->sync( $stream );
++		} finally {
++			fclose( $stream );
++		}
++		if ( is_link( $path ) || ( file_exists( $path ) && ! is_file( $path ) ) || ! @rename( $path . '.tmp', $path ) ) {
++			throw new RuntimeException( 'Unable to publish the export checkpoint manifest.' );
++		}
++	}
++
++	/**
++	 * Write an immutable chunk and close all handles before publishing it.
++	 *
++	 * @param string   $id             Job UUID.
++	 * @param int      $index          Zero-based chunk number.
++	 * @param iterable $formatted_rows Sparse rows keyed by eventual CSV columns.
++	 * @return array{rows:int,bytes:int}
++	 */
++	public function write_chunk( string $id, int $index, iterable $formatted_rows ): array {
++		$this->capacity();
++		$dir    = $this->job_dir( $id, true );
++		$target = $this->chunk_path( $dir, $index );
++		if ( file_exists( $target ) || is_link( $target ) ) {
++			throw new RuntimeException( 'A committed or unverified chunk already occupies this index.' );
++		}
++		$temp      = $target . '.tmp';
++		$stream    = $this->open( $temp, 'c+b' );
++		$row_count = 0;
++		$raw_bytes = 0;
++		$hash      = hash_init( 'sha256' );
++		try {
++			if ( ! ftruncate( $stream, 0 ) ) {
++				throw new RuntimeException( 'Unable to reset an interrupted export chunk.' );
++			}
++			$this->position( $stream, 0 );
++			foreach ( $formatted_rows as $row ) {
++				if ( ! is_array( $row ) ) {
++					throw new RuntimeException( 'An export row has an unsupported structure.' );
++				}
++				$line = json_encode( (object) $row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) . "\n";
++				if ( strlen( $line ) >= self::MAX_ROW_BYTES ) {
++					throw new RuntimeException( 'An export row exceeds the 32 MiB encoded row limit.' );
++				}
++				// A record begins with a marker. The footer begins with a JSON object.
++				$line = '+' . $line;
++				$this->write_all( $stream, $line );
++				hash_update( $hash, $line );
++				$raw_bytes += strlen( $line );
++				++$row_count;
++			}
++			$footer = json_encode( array( $row_count, $raw_bytes, hash_final( $hash ) ), JSON_THROW_ON_ERROR ) . "\n";
++			$this->write_all( $stream, $footer );
++			$this->sync( $stream );
++		} finally {
++			fclose( $stream );
++		}
++		// Only the uncommitted chunk at the caller's current index may be replaced.
++		$this->discard_file( $target );
++		$this->rename( $temp, $target );
++
++		return array(
++			'rows'  => $row_count,
++			'bytes' => $raw_bytes + strlen( $footer ),
++		);
++	}
++
++	/**
++	 * Append one committed chunk and fixed-size SHA-256 proofs of the appended bytes.
++	 *
++	 * @param string $id     Job UUID.
++	 * @param array  $state  Last committed checkpoint.
++	 * @param array  $config Job options.
++	 * @return array Updated checkpoint.
++	 */
++	public function finalize( string $id, array $state, array $config ): array {
++		$this->capacity();
++		$dir       = $this->job_dir( $id, true );
++		$index     = (int) ( $state['final_index'] ?? 0 );
++		$offset    = (int) ( $state['final_bytes'] ?? 0 );
++		$parts     = (int) ( $state['final_parts'] ?? 0 );
++		$columns   = $state['columns'];
++		$delimiter = $config['delimiter'] ?? ',';
++		if ( ! is_string( $delimiter ) || 1 !== strlen( $delimiter ) || false !== strpos( "\0\r\n\"", $delimiter ) || ! $columns ) {
++			throw new RuntimeException( 'The CSV schema or delimiter is invalid.' );
++		}
++
++		$csv = $this->open( $dir . '/products.partial', $offset ? 'r+b' : 'c+b' );
++		try {
++			$proof = $this->open( $dir . '/proof.partial', $parts ? 'r+b' : 'c+b' );
++			try {
++				$this->position( $csv, $offset );
++				$this->position( $proof, $parts * self::RECORD_BYTES );
++
++				$segment = hash_init( 'sha256' );
++				$length  = 0;
++				$rows    = 0;
++				if ( 0 === $offset ) {
++					$header = $this->csv_row( array_values( $columns ), $delimiter );
++					if ( ! isset( $config['bom'] ) || $config['bom'] ) {
++						$header = "\xEF\xBB\xBF" . $header;
++					}
++					$this->write_proven( $csv, $proof, $header, $segment, $length );
++				}
++
++				if ( $index < (int) $state['index'] ) {
++					$input = $this->open( $this->chunk_path( $dir, $index ), 'rb' );
++					try {
++						$rows = $this->append_chunk( $input, $csv, $proof, array_keys( $columns ), $delimiter, $segment, $length );
++					} finally {
++						fclose( $input );
++					}
++					++$index;
++				}
++
++				if ( $length ) {
++					$this->write_proof( $proof, $length, hash_final( $segment ) );
++				}
++				$this->sync( $csv );
++				$this->sync( $proof );
++				$state['final_index'] = $index;
++				$state['final_bytes'] = $this->size( $csv );
++				$state['final_parts'] = intdiv( $this->size( $proof ), self::RECORD_BYTES );
++				$state['final_rows']  = (int) ( $state['final_rows'] ?? 0 ) + $rows;
++			} finally {
++				fclose( $proof );
++			}
++		} finally {
++			fclose( $csv );
++		}
++		return $state;
++	}
++
++	/**
++	 * Verify a bounded set of on-disk byte ranges, then publish atomically.
++	 *
++	 * PHP 7.4 cannot persist HashContext. Segment verification is identical, but a
++	 * rolling digest of verified segments is stored as its validator on that runtime.
++	 *
++	 * @param string $id    Job UUID.
++	 * @param array  $state Last committed checkpoint.
++	 * @return array Updated checkpoint, including checksum when verification finishes.
++	 */
++	public function verify( string $id, array $state, string $extension = 'csv' ): array {
++		$this->extension( $extension );
++		$dir         = $this->job_dir( $id );
++		$partial     = $dir . ( 'csv' === $extension ? '/products.partial' : '/products.zip.partial' );
++		$published   = $dir . '/products.' . $extension;
++		$was_renamed = ! file_exists( $partial );
++		$format      = method_exists( HashContext::class, '__serialize' ) ? 'sha256' : 'sha256-segments-v1';
++		$offset      = 0;
++		$part        = 0;
++		$context     = 'sha256' === $format ? hash_init( 'sha256' ) : str_repeat( '0', 64 );
++
++		if ( ( $state['verify_format'] ?? '' ) === $format && (int) ( $state['verify_php'] ?? 0 ) === PHP_VERSION_ID ) {
++			$offset  = (int) $state['verify_bytes'];
++			$part    = (int) $state['verify_part'];
++			$context = $state['verify_context'];
++			if ( 'sha256' === $format ) {
++				$context = unserialize( base64_decode( $context, true ), array( 'allowed_classes' => array( HashContext::class ) ) );
++				if ( ! $context instanceof HashContext ) {
++					throw new RuntimeException( 'The verification checkpoint is invalid.' );
++				}
++			}
++		}
++
++		$csv = $this->open( $was_renamed ? $published : $partial, 'rb' );
++		try {
++			$proof = $this->open( $dir . ( 'csv' === $extension ? '/proof.partial' : '/zip-proof.partial' ), 'rb' );
++			try {
++				if ( $this->size( $csv ) !== $state['final_bytes']
++					|| $this->size( $proof ) !== $state['final_parts'] * self::RECORD_BYTES
++					|| 0 !== fseek( $csv, $offset )
++					|| 0 !== fseek( $proof, self::RECORD_BYTES * $part ) ) {
++					throw new RuntimeException( 'Export size does not match the verification checkpoint.' );
++				}
++				$started_at = $offset;
++				$first_part = $part;
++				while ( $part < $state['final_parts'] && $part < $first_part + 64 && $offset - $started_at < 4 * self::SEGMENT_BYTES ) {
++					$record = $this->read_exact( $proof, self::RECORD_BYTES );
++					if ( ! preg_match( '/\A([0-9]{10}) ([0-9a-f]{64})\n\z/D', $record, $match ) ) {
++						throw new RuntimeException( 'The CSV verification proof is invalid.' );
++					}
++					$length = (int) $match[1];
++					if ( $length < 1 || $length > self::SEGMENT_BYTES || $offset + $length > $state['final_bytes'] ) {
++						throw new RuntimeException( 'The CSV verification segment size is invalid.' );
++					}
++					$this->verify_part( $csv, $length, $match[2], $context );
++					$offset += $length;
++					++$part;
++				}
++			} finally {
++				fclose( $proof );
++			}
++		} finally {
++			fclose( $csv );
++		}
++
++		if ( $part === $state['final_parts'] ) {
++			if ( $offset !== $state['final_bytes'] ) {
++				throw new RuntimeException( 'The verified data does not cover the complete CSV.' );
++			}
++			if ( ! $was_renamed ) {
++				$this->rename( $partial, $published );
++			}
++			$this->write_ready_marker( $dir, $offset, $format, $context instanceof HashContext ? hash_final( clone $context ) : $context, $extension );
++			$state['checksum_algorithm'] = $format;
++			$state['checksum']           = $context instanceof HashContext ? hash_final( $context ) : $context;
++			if ( 'sha256' === $format ) {
++				$state['sha256'] = $state['checksum'];
++			}
++			unset( $state['verify_format'], $state['verify_php'], $state['verify_bytes'], $state['verify_part'], $state['verify_context'] );
++		} else {
++			$state['verify_format']  = $format;
++			$state['verify_php']     = PHP_VERSION_ID;
++			$state['verify_bytes']   = $offset;
++			$state['verify_part']    = $part;
++			$state['verify_context'] = $context instanceof HashContext ? base64_encode( serialize( $context ) ) : $context;
++		}
++
++		return $state;
++	}
++
++	/**
++	 * Package the verified CSV using ZIP64 STORE in bounded 8 MiB work units.
++	 * Compression streams cannot be checkpointed portably. STORE deliberately
++	 * trades compression for recovery, bounded memory and valid files above 4 GiB.
++	 * ZIP CRC32 state is serializable on PHP 8+. Every archive byte also receives
++	 * an independent SHA-256 proof and is reread by verify() before publication.
++	 *
++	 * @param string $id Job UUID.
++	 * @param array  $csv_state Verified CSV checkpoint with optional archive state.
++	 * @return array Proposed archive checkpoint, committed by the caller.
++	 */
++	public function package( string $id, array $csv_state ): array {
++		if ( ! method_exists( HashContext::class, '__serialize' ) ) {
++			throw new RuntimeException( 'Resumable ZIP64 packaging requires PHP 8.0 or newer.' );
++		}
++		$dir    = $this->job_dir( $id );
++		$state  = $csv_state['archive'] ?? array();
++		$offset = (int) ( $state['source_bytes'] ?? 0 );
++		$size   = (int) $csv_state['final_bytes'];
++		$this->capacity( min( self::SEGMENT_BYTES, $size - $offset ) + 1024 );
++		$crc = hash_init( 'crc32b' );
++		if ( $offset ) {
++			if ( PHP_VERSION_ID !== ( $state['php'] ?? 0 ) ) {
++				// A PHP upgrade cannot safely deserialize a different runtime's context.
++				$state  = array();
++				$offset = 0;
++			} else {
++				$crc = unserialize( base64_decode( $state['crc'], true ), array( 'allowed_classes' => array( HashContext::class ) ) );
++				if ( ! $crc instanceof HashContext ) {
++					throw new RuntimeException( 'The ZIP64 CRC checkpoint is invalid.' );
++				}
++			}
++		}
++		$input = $this->open( $this->path( $id, 'csv', $csv_state ), 'rb' );
++		try {
++			if ( 0 !== fseek( $input, $offset ) ) {
++				throw new RuntimeException( 'The ZIP64 source offset is invalid.' );
++			}
++			$output = $this->open( $dir . '/products.zip.partial', empty( $state['final_bytes'] ) ? 'c+b' : 'r+b' );
++			try {
++				$proof = $this->open( $dir . '/zip-proof.partial', empty( $state['final_parts'] ) ? 'c+b' : 'r+b' );
++				try {
++					$this->position( $output, (int) ( $state['final_bytes'] ?? 0 ) );
++					$this->position( $proof, (int) ( $state['final_parts'] ?? 0 ) * self::RECORD_BYTES );
++					$segment = hash_init( 'sha256' );
++					$length  = 0;
++					$name    = 'products.csv';
++					if ( ! $offset ) {
++						// Bit 3 defers CRC and sizes to the descriptor. Keep local
++						// ZIP64 sizes zero too, as required by strict older readers.
++						$extra  = pack( 'vvPP', 1, 16, 0, 0 );
++						$header = pack( 'VvvvvvVVVvv', 0x04034b50, 45, 0x0808, 0, 0, 33, 0, 0xffffffff, 0xffffffff, strlen( $name ), strlen( $extra ) );
++						$this->write_proven( $output, $proof, $header . $name . $extra, $segment, $length );
++					}
++					$remaining = min( self::SEGMENT_BYTES, $size - $offset );
++					while ( $remaining > 0 ) {
++						$block = $this->read_exact( $input, min( 1024 * 1024, $remaining ) );
++						hash_update( $crc, $block );
++						$this->write_proven( $output, $proof, $block, $segment, $length );
++						$offset    += strlen( $block );
++						$remaining -= strlen( $block );
++					}
++					if ( $offset === $size ) {
++						$crc_value      = hexdec( hash_final( clone $crc ) );
++						$descriptor     = pack( 'VVPP', 0x08074b50, $crc_value, $size, $size );
++						$central_offset = ftell( $output ) + strlen( $descriptor );
++						$extra          = pack( 'vvPPP', 1, 24, $size, $size, 0 );
++						$central        = pack( 'VvvvvvvVVVvvvvvVV', 0x02014b50, 45, 45, 0x0808, 0, 0, 33, $crc_value, 0xffffffff, 0xffffffff, strlen( $name ), strlen( $extra ), 0, 0, 0, 0, 0xffffffff ) . $name . $extra;
++						$end_offset     = $central_offset + strlen( $central );
++						$end64          = pack( 'VPvvVVPPPP', 0x06064b50, 44, 45, 45, 0, 0, 1, 1, strlen( $central ), $central_offset );
++						$locator        = pack( 'VVPV', 0x07064b50, 0, $end_offset, 1 );
++						$end            = pack( 'VvvvvVVv', 0x06054b50, 0, 0, 0xffff, 0xffff, 0xffffffff, 0xffffffff, 0 );
++						$this->write_proven( $output, $proof, $descriptor . $central . $end64 . $locator . $end, $segment, $length );
++						$state['finished'] = true;
++					}
++					if ( $length ) {
++						$this->write_proof( $proof, $length, hash_final( $segment ) );
++					}
++					$this->sync( $output );
++					$this->sync( $proof );
++					$state['source_bytes'] = $offset;
++					$state['final_bytes']  = $this->size( $output );
++					$state['final_parts']  = intdiv( $this->size( $proof ), self::RECORD_BYTES );
++					$state['php']          = PHP_VERSION_ID;
++					$state['crc']          = base64_encode( serialize( $crc ) );
++				} finally {
++					fclose( $proof );
++				}
++			} finally {
++				fclose( $output );
++			}
++		} finally {
++			fclose( $input );
++		}
++		return $state;
++	}
++
++	/**
++	 * Resolve the verified artifact after authorization.
++	 *
++	 * @param string $id Job UUID.
++	 * @return string Absolute filesystem path.
++	 */
++	public function path( string $id, string $extension = 'csv', array $expected = array() ): string {
++		$this->extension( $extension );
++		$dir    = $this->job_dir( $id );
++		$path   = $dir . '/products.' . $extension;
++		$stream = $this->open( $path, 'rb' );
++		$size   = $this->size( $stream );
++		fclose( $stream );
++		$marker = $this->open( $dir . ( 'csv' === $extension ? '/ready.json' : '/ready-zip.json' ), 'rb' );
++		try {
++			$marker_size = $this->size( $marker );
++			if ( $marker_size < 1 || $marker_size > 1024 ) {
++				throw new RuntimeException( 'The export readiness marker is invalid.' );
++			}
++			$data = json_decode( $this->read_exact( $marker, $marker_size ), true, 4, JSON_THROW_ON_ERROR );
++		} finally {
++			fclose( $marker );
++		}
++		if ( ! is_array( $data ) || (int) ( $data['bytes'] ?? -1 ) !== $size || ! preg_match( '/\A[a-f0-9]{64}\z/D', $data['checksum'] ?? '' ) ) {
++			throw new RuntimeException( 'The export file has not been verified for download.' );
++		}
++		if ( $expected && ( ( $expected['final_bytes'] ?? -1 ) !== $size || ! hash_equals( (string) ( $expected['checksum'] ?? '' ), $data['checksum'] ) || ( $expected['checksum_algorithm'] ?? '' ) !== $data['algorithm'] ) ) {
++			throw new RuntimeException( 'The export artifact does not match its database checkpoint.' );
++		}
++		return $path;
++	}
++
++	/**
++	 * Delete a chunk only after the caller confirms that the persisted checkpoint
++	 * does not include its index. This is recovery for a file committed before DB.
++	 *
++	 * @param string $id Job UUID.
++	 * @param int    $index Uncommitted chunk index.
++	 */
++	public function discard_uncommitted_chunk( string $id, int $index ): void {
++		$this->discard_file( $this->chunk_path( $this->job_dir( $id ), $index ) );
++	}
++
++	/**
++	 * Resolve a private offload route after authorization.
++	 *
++	 * @param string $id Job UUID.
++	 * @return string Path relative to the configured private base.
++	 */
++	public function relative_path( string $id, string $extension = 'csv' ): string {
++		$this->path( $id, $extension );
++		return $this->site . '/' . $id . '/products.' . $extension;
++	}
++
++	/**
++	 * Clean at most 256 files. Safe to repeat after interruption.
++	 *
++	 * @param string $id Job UUID.
++	 * @return bool Whether the job directory is fully removed.
++	 */
++	public function purge( string $id ): bool {
++		$dir = $this->job_dir( $id );
++		if ( ! file_exists( $dir ) ) {
++			return true;
++		}
++		$removed = 0;
++		foreach ( new DirectoryIterator( $dir ) as $file ) {
++			if ( $file->isDot() ) {
++				continue;
++			}
++			if ( ! preg_match( '/\A(?:chunk-[0-9]{8}\.rows(?:\.tmp)?|products\.(?:partial|csv|zip(?:\.partial)?)|(?:zip-)?proof\.partial|(?:manifest|ready(?:-zip)?)\.json(?:\.tmp)?)\z/D', $file->getFilename() ) ) {
++				throw new RuntimeException( 'An unexpected file prevents automatic large export cleanup.' );
++			}
++			$this->discard_file( $file->getPathname() );
++			if ( ++$removed >= 256 ) {
++				return false;
++			}
++		}
++		if ( ! @rmdir( $dir ) ) {
++			throw new RuntimeException( 'Unable to remove the large export job directory.' );
++		}
++		return true;
++	}
++
++	private function append_chunk( $input, $csv, $proof, array $columns, string $delimiter, &$segment, int &$length ): int {
++		$hash  = hash_init( 'sha256' );
++		$rows  = 0;
++		$bytes = 0;
++		while ( true ) {
++			$line = fgets( $input, self::MAX_ROW_BYTES + 2 );
++			if ( false === $line ) {
++				break;
++			}
++			if ( "\n" !== substr( $line, -1 ) ) {
++				throw new RuntimeException( 'An export chunk contains an incomplete row.' );
++			}
++			if ( '+' !== $line[0] ) {
++				$footer = json_decode( $line, true, 8, JSON_THROW_ON_ERROR );
++				if ( array( $rows, $bytes, hash_final( $hash ) ) !== $footer || false !== fgetc( $input ) || ! feof( $input ) ) {
++					throw new RuntimeException( 'An export chunk failed its checksum or row count verification.' );
++				}
++				return $rows;
++			}
++			hash_update( $hash, $line );
++			$bytes += strlen( $line );
++			$row    = json_decode( substr( $line, 1 ), true, 8, JSON_THROW_ON_ERROR );
++			if ( ! is_array( $row ) ) {
++				throw new RuntimeException( 'An export chunk contains an invalid row.' );
++			}
++			$cells = array();
++			foreach ( $columns as $key ) {
++				$cells[] = $row[ $key ] ?? '';
++			}
++			$this->write_proven( $csv, $proof, $this->csv_row( $cells, $delimiter ), $segment, $length );
++			++$rows;
++		}
++		throw new RuntimeException( 'An export chunk is missing its checksum footer.' );
++	}
++
++	private function csv_row( array $cells, string $delimiter ): string {
++		// This keeps the CSV escape byte empty on all supported PHP versions and
++		// lets the writer compare the expected byte count against each actual write.
++		$special = $delimiter . "\"\r\n\t ";
++		foreach ( $cells as &$cell ) {
++			if ( ! is_scalar( $cell ) && null !== $cell ) {
++				throw new RuntimeException( 'An export column contains a non-scalar value.' );
++			}
++			$cell = (string) $cell;
++			if ( false !== strpbrk( $cell, $special ) || ( '' === $cell && 1 === count( $cells ) ) ) {
++				$cell = '"' . str_replace( '"', '""', $cell ) . '"';
++			}
++		}
++		unset( $cell );
++		return implode( $delimiter, $cells ) . "\n";
++	}
++
++	private function write_proven( $csv, $proof, string $data, &$segment, int &$length ): void {
++		$offset = 0;
++		$size   = strlen( $data );
++		do {
++			$block = substr( $data, $offset, self::SEGMENT_BYTES - $length );
++			$this->write_all( $csv, $block );
++			hash_update( $segment, $block );
++			$length += strlen( $block );
++			$offset += strlen( $block );
++			if ( self::SEGMENT_BYTES === $length ) {
++				$this->write_proof( $proof, $length, hash_final( $segment ) );
++				$segment = hash_init( 'sha256' );
++				$length  = 0;
++			}
++		} while ( $offset < $size );
++	}
++
++	private function write_proof( $proof, int $length, string $digest ): void {
++		$this->write_all( $proof, sprintf( "%010d %s\n", $length, $digest ) );
++	}
++
++	private function verify_part( $stream, int $remaining, string $expected, &$context ): void {
++		$hash = hash_init( 'sha256' );
++		while ( $remaining > 0 ) {
++			$data = $this->read_exact( $stream, min( $remaining, 1024 * 1024 ) );
++			hash_update( $hash, $data );
++			if ( self::is_hash_context( $context ) ) {
++				hash_update( $context, $data );
++			}
++			$remaining -= strlen( $data );
++		}
++		$digest = hash_final( $hash );
++		if ( ! hash_equals( $expected, $digest ) ) {
++			throw new RuntimeException( 'The CSV failed verification.' );
++		}
++		if ( ! self::is_hash_context( $context ) ) {
++			$context = hash( 'sha256', $context . $digest );
++		}
++	}
++
++	private function write_ready_marker( string $dir, int $bytes, string $algorithm, string $checksum, string $extension = 'csv' ): void {
++		$path   = $dir . ( 'csv' === $extension ? '/ready.json' : '/ready-zip.json' );
++		$stream = $this->open( $path . '.tmp', 'c+b' );
++		try {
++			$this->position( $stream, 0 );
++			$this->write_all(
++				$stream,
++				json_encode(
++					array(
++						'bytes'     => $bytes,
++						'algorithm' => $algorithm,
++						'checksum'  => $checksum,
++					),
++					JSON_THROW_ON_ERROR
++				)
++			);
++			$this->sync( $stream );
++		} finally {
++			fclose( $stream );
++		}
++		$this->discard_file( $path );
++		$this->rename( $path . '.tmp', $path );
++	}
++
++	private function extension( string $extension ): void {
++		if ( ! in_array( $extension, array( 'csv', 'zip' ), true ) ) {
++			throw new RuntimeException( 'Unsupported export artifact format.' );
++		}
++	}
++
++	private static function normalized( string $path ): string {
++		$path = rtrim( str_replace( '\\', '/', $path ), '/' );
++		return '\\' === DIRECTORY_SEPARATOR ? strtolower( $path ) : $path;
++	}
++
++	private function site_dir(): string {
++		return $this->root . '/' . $this->site;
++	}
++
++	private function job_dir( string $id, bool $create = false ): string {
++		if ( ! preg_match( '/\A[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\z/D', $id ) ) {
++			throw new RuntimeException( 'Invalid export job ID.' );
++		}
++		// Recheck the parent for every operation before using a descendant.
++		$this->directory( $this->site_dir() );
++		$dir = $this->site_dir() . '/' . $id;
++		if ( $create ) {
++			$this->ensure_directory( $dir );
++		} elseif ( file_exists( $dir ) || is_link( $dir ) ) {
++			$this->directory( $dir );
++		}
++		return $dir;
++	}
++
++	private function ensure_directory( string $path ): void {
++		if ( ! file_exists( $path ) && ! is_link( $path ) && ! @mkdir( $path, 0700 ) && ! is_dir( $path ) ) {
++			throw new RuntimeException( 'Unable to create private large export storage.' );
++		}
++		$this->directory( $path );
++	}
++
++	private function directory( string $path ): void {
++		clearstatcache( true, $path );
++		$real = realpath( $path );
++		if ( is_link( $path ) || ! is_dir( $path ) || false === $real || self::normalized( $real ) !== self::normalized( $path ) ) {
++			throw new RuntimeException( 'Large export directory is missing or unsafe.' );
++		}
++	}
++
++	private function chunk_path( string $dir, int $index ): string {
++		if ( $index < 0 || $index >= 100000000 ) {
++			throw new RuntimeException( 'The large export chunk number is out of range.' );
++		}
++		return sprintf( '%s/chunk-%08d.rows', $dir, $index );
++	}
++
++	private function open( string $path, string $mode ) {
++		clearstatcache( true, $path );
++		if ( is_link( $path ) || ( file_exists( $path ) && ! is_file( $path ) ) ) {
++			throw new RuntimeException( 'An export file path is unsafe.' );
++		}
++		$stream = @fopen( $path, $mode );
++		if ( false === $stream ) {
++			throw new RuntimeException( 'Unable to open a required export file.' );
++		}
++		$metadata = fstat( $stream );
++		if ( false === $metadata || 0100000 !== ( $metadata['mode'] & 0170000 ) || 1 !== $metadata['nlink'] ) {
++			fclose( $stream );
++			throw new RuntimeException( 'Export storage requires regular files with one filesystem link.' );
++		}
++		return $stream;
++	}
++
++	private function discard_file( string $path ): void {
++		clearstatcache( true, $path );
++		if ( is_link( $path ) || ( file_exists( $path ) && ( ! is_file( $path ) || ! @unlink( $path ) ) ) ) {
++			throw new RuntimeException( 'Unable to remove a large export file.' );
++		}
++	}
++
++	private function rename( string $from, string $to ): void {
++		clearstatcache( true, $to );
++		if ( file_exists( $to ) || is_link( $to ) || ! @rename( $from, $to ) ) {
++			throw new RuntimeException( 'Unable to publish a large export file.' );
++		}
++	}
++
++	private function position( $stream, int $offset ): void {
++		$size = $this->size( $stream );
++		if ( $size < $offset || ( $size > $offset && ! self::io(
++			static function () use ( $stream, $offset ) {
++				return ftruncate( $stream, $offset ); }
++		) ) || 0 !== fseek( $stream, $offset ) ) {
++			throw new RuntimeException( 'Export file does not match its committed byte offset.' );
++		}
++	}
++
++	private function size( $stream ): int {
++		$metadata = fstat( $stream );
++		if ( false === $metadata || $metadata['size'] < 0 ) {
++			throw new RuntimeException( 'Unable to determine the export file size.' );
++		}
++		return (int) $metadata['size'];
++	}
++
++	private function write_all( $stream, string $data ): void {
++		$length = strlen( $data );
++		for ( $offset = 0; $offset < $length; $offset += $written ) {
++			$written = self::io(
++				static function () use ( $stream, $data, $offset ) {
++					return fwrite( $stream, 0 === $offset ? $data : substr( $data, $offset ) );
++				}
++			);
++			if ( false === $written || 0 === $written ) {
++				throw new RuntimeException( 'An export file write could not complete.' );
++			}
++		}
++	}
++
++	private function read_exact( $stream, int $length ): string {
++		$data = '';
++		while ( strlen( $data ) < $length ) {
++			$remaining = $length - strlen( $data );
++			$part      = self::io(
++				static function () use ( $stream, $remaining ) {
++					return fread( $stream, $remaining );
++				}
++			);
++			if ( false === $part || '' === $part ) {
++				throw new RuntimeException( 'An export file read ended early.' );
++			}
++			$data .= $part;
++		}
++		return $data;
++	}
++
++	private function sync( $stream ): void {
++		if ( ! self::io(
++			static function () use ( $stream ) {
++				return fflush( $stream ) && ( ! function_exists( 'fsync' ) || fsync( $stream ) ); }
++		) ) {
++			throw new RuntimeException( 'Unable to flush an export file to disk.' );
++		}
++	}
++
++	/**
++	 * Turn an I/O warning into a safe exception while preserving the caller's
++	 * error handler. Warning text can contain private filesystem paths. Results
++	 * are still checked by each caller, including zero-byte and partial writes.
++	 *
++	 * @param callable $operation One local I/O operation.
++	 * @return mixed Operation result.
++	 */
++	public static function io( callable $operation ) {
++		set_error_handler(
++			static function () {
++				throw new RuntimeException( 'A private export filesystem operation failed.' );
++			}
++		);
++		try {
++			return $operation();
++		} finally {
++			restore_error_handler();
++		}
++	}
++
++	/**
++	 * Supported runtimes use HashContext objects; the segment fallback is a string.
++	 *
++	 * @param mixed $context Hash context from hash_init().
++	 * @return bool
++	 */
++	private static function is_hash_context( $context ): bool {
++		return is_object( $context ) && is_a( $context, 'HashContext' );
++	}
++}
+diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php
+new file mode 100644
+index 00000000..088510b6
+--- /dev/null
++++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php
+@@ -0,0 +1,534 @@
++<?php
++/**
++ * Admin UI, background queue, and protected download integration.
++ *
++ * @package WooCommerce\Export
++ */
++
++namespace Automattic\WooCommerce\Internal\LargeExport;
++
++use Throwable;
++
++defined( 'ABSPATH' ) || exit;
++
++/**
++ * Keep HTTP requests limited to job control and bounded file delivery.
++ */
++final class Integration {
++	const WORKER_HOOK  = 'woocommerce_large_product_export_worker';
++	const SWEEP_HOOK   = 'woocommerce_large_product_export_sweep';
++	const ACTION_GROUP = 'woocommerce-large-product-export';
++	const ADMIN_PAGE   = 'wc-large-product-export';
++
++	/** @var Store|null */
++	private static $store;
++
++	/** @var Files|null */
++	private static $files;
++
++	/** @var Engine|null */
++	private static $engine;
++
++	/** Register the opt-in admin and queue entry points. */
++	public static function register(): void {
++		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ) );
++		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
++		add_action( 'admin_post_woocommerce_large_export_download', array( __CLASS__, 'download' ) );
++		add_action( 'wp_ajax_woocommerce_large_export_create', array( __CLASS__, 'create' ) );
++		add_action( 'wp_ajax_woocommerce_large_export_status', array( __CLASS__, 'status' ) );
++		add_action( 'wp_ajax_woocommerce_large_export_control', array( __CLASS__, 'control' ) );
++		add_action( self::WORKER_HOOK, array( __CLASS__, 'run_worker' ) );
++		add_action( self::SWEEP_HOOK, array( __CLASS__, 'sweep' ) );
++		add_action( 'action_scheduler_init', array( __CLASS__, 'schedule_sweeper' ) );
++		add_filter( 'cron_schedules', array( __CLASS__, 'cron_schedules' ) );
++		add_action( 'init', array( __CLASS__, 'schedule_sweeper' ), 20 );
++	}
++
++	/** Register a one-minute fallback interval when Action Scheduler is unavailable. */
++	public static function cron_schedules( array $schedules ): array {
++		$schedules['wc_large_export_minute'] = array(
++			'interval' => 60,
++			'display'  => __( 'Every minute (WooCommerce large export recovery)', 'woocommerce' ),
++		);
++		return $schedules;
++	}
++
++	/** Ensure abandoned worker leases and queued work are revisited after process failure. */
++	public static function schedule_sweeper(): void {
++		if ( 'cli' === self::runner() ) {
++			return;
++		}
++		if ( 'cron' !== self::runner() && function_exists( 'as_schedule_recurring_action' ) && function_exists( 'as_has_scheduled_action' ) ) {
++			if ( as_has_scheduled_action( self::SWEEP_HOOK, array(), self::ACTION_GROUP ) ) {
++				return;
++			}
++			$action_id = as_schedule_recurring_action( time() + 60, 60, self::SWEEP_HOOK, array(), self::ACTION_GROUP, true );
++			if ( $action_id ) {
++				return;
++			}
++		}
++		if ( ! wp_next_scheduled( self::SWEEP_HOOK ) ) {
++			wp_schedule_event( time() + 60, 'wc_large_export_minute', self::SWEEP_HOOK );
++		}
++	}
++
++	/** Requeue eligible work when a process died after its durable lease expired. */
++	public static function sweep(): void {
++		if ( 'cli' === self::runner() ) {
++			return;
++		}
++		try {
++			$store = self::store();
++			foreach ( $store->due() as $job_id ) {
++				$pending = wp_next_scheduled( self::WORKER_HOOK, array( $job_id ) );
++				if ( 'cron' !== self::runner() && function_exists( 'as_has_scheduled_action' ) ) {
++					$pending = $pending || as_has_scheduled_action( self::WORKER_HOOK, array( $job_id ), self::ACTION_GROUP );
++				}
++				if ( ! $pending ) {
++					$job = $store->get( $job_id );
++					if ( $job ) {
++						self::enqueue( $job_id, max( 1, (int) $job['available_at'] - time() ) );
++					}
++				}
++			}
++			self::engine()->sweep();
++		} catch ( Throwable $exception ) {
++			error_log( 'WooCommerce large product export recovery sweep could not complete.' );
++		}
++	}
++
++	/** Register a separate page; the stock exporter and its hooks remain available. */
++	public static function add_menu(): void {
++		add_submenu_page(
++			'edit.php?post_type=product',
++			__( 'Large Product Export', 'woocommerce' ),
++			__( 'Large Export', 'woocommerce' ),
++			'export',
++			self::ADMIN_PAGE,
++			array( __CLASS__, 'render_page' )
++		);
++	}
++
++	/** Load the small admin controller only on the new export page. */
++	public static function enqueue_assets( string $hook_suffix ): void {
++		if ( 'product_page_' . self::ADMIN_PAGE !== $hook_suffix ) {
++			return;
++		}
++
++		wp_enqueue_script(
++			'wc-large-product-export',
++			WC()->plugin_url() . '/assets/js/admin/wc-large-product-export.js',
++			array( 'jquery' ),
++			defined( 'WC_VERSION' ) ? WC_VERSION : false,
++			true
++		);
++		wp_localize_script(
++			'wc-large-product-export',
++			'wc_large_product_export_params',
++			array(
++				'ajax_url'      => admin_url( 'admin-ajax.php' ),
++				'nonce'         => wp_create_nonce( 'woocommerce-large-product-export-ui' ),
++				'poll_interval' => max( 2000, min( 15000, (int) apply_filters( 'woocommerce_large_export_poll_interval_ms', 4000 ) ) ),
++				'messages'      => array(
++					'working' => __( 'Processing the export in the background…', 'woocommerce' ),
++					'error'   => __( 'The export request failed. The saved job can be checked or resumed.', 'woocommerce' ),
++				),
++			)
++		);
++	}
++
++	/** Render current-user jobs and the asynchronous export form. */
++	public static function render_page(): void {
++		self::require_export_capability();
++		$jobs  = array();
++		$error = '';
++		$ready = defined( 'WC_LARGE_PRODUCT_EXPORT' ) && true === WC_LARGE_PRODUCT_EXPORT;
++		try {
++			if ( $ready ) {
++				self::files();
++				$jobs = self::store()->recent( get_current_user_id() );
++			}
++		} catch ( Throwable $exception ) {
++			$error = $exception->getMessage();
++		}
++
++		$exporter      = new \WC_Product_CSV_Exporter();
++		$product_types = \WC_Admin_Exporters::get_product_types();
++		$categories    = get_terms(
++			array(
++				'taxonomy'   => 'product_cat',
++				'hide_empty' => false,
++				'number'     => 5000,
++				'orderby'    => 'name',
++				'order'      => 'ASC',
++			)
++		);
++		if ( is_wp_error( $categories ) ) {
++			$categories = array();
++		}
++
++		$selected_ids = array();
++		if ( ! empty( $_GET['product_ids'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Mirrors the core selected-products exporter.
++			check_admin_referer( 'export-selected-products' );
++			$selected_ids = array_values( array_filter( array_map( 'absint', explode( ',', sanitize_text_field( wp_unslash( $_GET['product_ids'] ) ) ) ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
++		}
++
++		include WC_ABSPATH . 'includes/admin/views/html-admin-page-large-product-export.php';
++	}
++
++	/** Create one small durable job, then schedule its independent worker. */
++	public static function create(): void {
++		check_ajax_referer( 'woocommerce-large-product-export-ui', 'security' );
++		self::require_export_capability_json();
++
++		try {
++			$ids = array();
++			if ( ! empty( $_POST['product_ids'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				$raw_ids = explode( ',', sanitize_text_field( wp_unslash( $_POST['product_ids'] ) ) );
++				if ( count( $raw_ids ) > 2000 ) {
++					throw new \InvalidArgumentException( __( 'Export selected products in jobs of at most 2,000 IDs.', 'woocommerce' ) );
++				}
++				$ids = array_values( array_filter( array_map( 'absint', $raw_ids ) ) );
++			}
++
++			$options = array(
++				'mode'        => isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : 'compatibility', // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				'format'      => isset( $_POST['file_format'] ) ? sanitize_key( wp_unslash( $_POST['file_format'] ) ) : 'csv', // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				'columns'     => self::post_strings( 'columns', 1000 ),
++				'types'       => self::post_strings( 'types', 100 ),
++				'categories'  => self::post_strings( 'categories', 500 ),
++				'ids'         => $ids,
++				'meta'        => ! empty( $_POST['meta'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				'spreadsheet' => ! empty( $_POST['spreadsheet'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				'bom'         => ! empty( $_POST['bom'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
++			);
++			if ( isset( $_POST['request_id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				$request_id = sanitize_text_field( wp_unslash( $_POST['request_id'] ) );
++				if ( ! preg_match( '/\A[A-Za-z0-9_-]{16,128}\z/D', $request_id ) ) {
++					throw new \InvalidArgumentException( __( 'Invalid export request ID.', 'woocommerce' ) );
++				}
++				$options['request_id'] = $request_id;
++			}
++			$job = self::engine()->create( get_current_user_id(), $options );
++			self::enqueue( $job['id'] );
++			wp_send_json_success( self::summary( $job ) );
++		} catch ( \InvalidArgumentException $exception ) {
++			wp_send_json_error( array( 'message' => $exception->getMessage() ), 400 );
++		} catch ( Throwable $exception ) {
++			wp_send_json_error( array( 'message' => __( 'The export job could not be created. Check the configured private storage and database, then retry.', 'woocommerce' ) ), 500 );
++		}
++	}
++
++	/** Return persisted progress, not a browser-generated estimate. */
++	public static function status(): void {
++		check_ajax_referer( 'woocommerce-large-product-export-ui', 'security' );
++		self::require_export_capability_json();
++
++		try {
++			if ( empty( $_POST['job_id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				$jobs = self::store()->recent( get_current_user_id() );
++			} else {
++				$job = self::store()->get( sanitize_text_field( wp_unslash( $_POST['job_id'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				self::require_job_access( $job );
++				$jobs = array( $job );
++			}
++			wp_send_json_success( array_map( array( __CLASS__, 'summary' ), $jobs ) );
++		} catch ( Throwable $exception ) {
++			wp_send_json_error( array( 'message' => __( 'The export job status could not be read.', 'woocommerce' ) ), 500 );
++		}
++	}
++
++	/** Apply an authorized pause, resume, cancel, or retry command. */
++	public static function control(): void {
++		$job_id = isset( $_POST['job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['job_id'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
++		if ( ! wp_verify_nonce( isset( $_POST['security'] ) ? sanitize_text_field( wp_unslash( $_POST['security'] ) ) : '', 'woocommerce-large-export-' . $job_id ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
++			wp_send_json_error( array( 'message' => __( 'The export control token has expired. Refresh the page.', 'woocommerce' ) ), 403 );
++		}
++		self::require_export_capability_json();
++
++		try {
++			$job = self::store()->get( $job_id );
++			self::require_job_access( $job );
++			$action = isset( $_POST['control'] ) ? sanitize_key( wp_unslash( $_POST['control'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
++			if ( ! in_array( $action, array( 'pause', 'resume', 'cancel', 'retry' ), true ) ) {
++				throw new \InvalidArgumentException( __( 'Unknown export control action.', 'woocommerce' ) );
++			}
++			$job = self::store()->control( $job_id, $action );
++			if ( in_array( $job['status'], Engine::ACTIVE, true ) ) {
++				self::enqueue( $job_id, max( 0, (int) $job['available_at'] - time() ) );
++			}
++			wp_send_json_success( self::summary( $job ) );
++		} catch ( \InvalidArgumentException $exception ) {
++			wp_send_json_error( array( 'message' => $exception->getMessage() ), 400 );
++		} catch ( Throwable $exception ) {
++			wp_send_json_error( array( 'message' => __( 'The export control could not be applied.', 'woocommerce' ) ), 500 );
++		}
++	}
++
++	/** Run a single bounded worker window and enqueue the next window if needed. */
++	public static function run_worker( $job_id ): void {
++		if ( 'cli' === self::runner() ) {
++			return;
++		}
++		if ( ! is_string( $job_id ) || ! preg_match( '/\A[0-9a-f-]{36}\z/D', $job_id ) ) {
++			return;
++		}
++		try {
++			$job = self::engine()->run( $job_id, 5 );
++			if ( $job && in_array( $job['status'], Engine::ACTIVE, true ) ) {
++				$delay = max( 2, (int) $job['available_at'] - time() );
++				self::enqueue( $job_id, min( 900, $delay ) );
++			}
++		} catch ( Throwable $exception ) {
++			// Keep request data and third-party exception messages out of server logs.
++			error_log( 'WooCommerce large product export worker could not complete a scheduled window.' );
++			self::schedule_fallback( $job_id, 30 );
++		}
++	}
++
++	/** Serve only a verified artifact belonging to the current authorized user. */
++	public static function download(): void {
++		$job_id = isset( $_GET['job_id'] ) ? sanitize_text_field( wp_unslash( $_GET['job_id'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
++		check_admin_referer( 'woocommerce-large-export-download-' . $job_id );
++		self::require_export_capability();
++
++		try {
++			$job = self::store()->get( $job_id );
++			self::require_job_access( $job );
++			if ( 'completed' !== $job['status'] || empty( $job['checkpoint']['checksum'] ) ) {
++				wp_die( esc_html__( 'This export file is not yet verified and ready to download.', 'woocommerce' ), '', array( 'response' => 409 ) );
++			}
++			$extension = 'zip' === ( $job['config']['format'] ?? 'csv' ) ? 'zip' : 'csv';
++			$proof     = 'zip' === $extension ? ( $job['checkpoint']['archive'] ?? array() ) : $job['checkpoint'];
++			self::serve_file( self::files()->path( $job_id, $extension, $proof ), $job );
++		} catch ( Throwable $exception ) {
++			wp_die( esc_html__( 'The verified export file is unavailable.', 'woocommerce' ), '', array( 'response' => 404 ) );
++		}
++	}
++
++	/**
++	 * Stream the verified artifact in bounded blocks, or let an explicitly configured
++	 * internal web-server location handle the transfer.
++	 *
++	 * @param string $path Verified file path.
++	 * @param array  $job  Persisted job.
++	 */
++	private static function serve_file( string $path, array $job ): void {
++		$method = strtoupper( $_SERVER['REQUEST_METHOD'] ?? 'GET' );
++		if ( ! in_array( $method, array( 'GET', 'HEAD' ), true ) ) {
++			header( 'Allow: GET, HEAD' );
++			wp_die( esc_html__( 'This download only supports GET and HEAD.', 'woocommerce' ), '', array( 'response' => 405 ) );
++		}
++		clearstatcache( true, $path );
++		$size = filesize( $path );
++		if ( false === $size || ! is_file( $path ) || is_link( $path ) ) {
++			wp_die( esc_html__( 'The verified export file is unavailable.', 'woocommerce' ), '', array( 'response' => 404 ) );
++		}
++
++		$extension = 'zip' === ( $job['config']['format'] ?? 'csv' ) ? 'zip' : 'csv';
++		$proof     = 'zip' === $extension ? $job['checkpoint']['archive'] : $job['checkpoint'];
++		$checksum  = (string) $proof['checksum'];
++		$etag      = '"' . $checksum . '"';
++		$modified  = (int) ( $job['completed_at'] ? $job['completed_at'] : $job['updated_at'] );
++		$range     = self::requested_range( $size, $etag, $modified );
++		if ( false === $range ) {
++			header( 'Content-Range: bytes */' . $size );
++			wp_die( esc_html__( 'The requested download range is not valid.', 'woocommerce' ), '', array( 'response' => 416 ) );
++		}
++
++		$start    = null === $range ? 0 : $range[0];
++		$length   = null === $range ? $size : $range[1] - $range[0] + 1;
++		$status   = null === $range ? 200 : 206;
++		$filename = 'products-' . $job['id'] . '.' . $extension;
++		// WordPress/plugins may leave an output buffer active. A bounded filesystem
++		// stream is not bounded if that buffer accumulates the complete response.
++		while ( ob_get_level() > 0 ) {
++			if ( ! Files::io(
++				static function () {
++					return ob_end_clean(); }
++			) ) {
++				wp_die( esc_html__( 'The server output buffer cannot be disabled for this download.', 'woocommerce' ), '', array( 'response' => 500 ) );
++			}
++		}
++		$compression = strtolower( (string) ini_get( 'zlib.output_compression' ) );
++		if ( ! in_array( $compression, array( '', '0', 'off' ), true ) && false === Files::io(
++			static function () {
++				return ini_set( 'zlib.output_compression', '0' ); }
++		) ) {
++			wp_die( esc_html__( 'The server compression setting prevents a byte-exact download.', 'woocommerce' ), '', array( 'response' => 500 ) );
++		}
++		status_header( $status );
++		header( 'Content-Type: ' . ( 'zip' === $extension ? 'application/zip' : 'text/csv; charset=utf-8' ) );
++		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
++		header( 'X-Content-Type-Options: nosniff' );
++		header( 'Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0' );
++		header( 'Pragma: no-cache' );
++		header( 'Accept-Ranges: bytes' );
++		header( 'ETag: ' . $etag );
++		header( 'Last-Modified: ' . gmdate( 'D, d M Y H:i:s', $modified ) . ' GMT' );
++		header( 'Content-Length: ' . $length );
++		if ( null !== $range ) {
++			header( 'Content-Range: bytes ' . $start . '-' . ( $start + $length - 1 ) . '/' . $size );
++		}
++
++		$accel_prefix = defined( 'WC_LARGE_EXPORT_X_ACCEL_PREFIX' ) ? WC_LARGE_EXPORT_X_ACCEL_PREFIX : '';
++		if ( is_string( $accel_prefix ) && preg_match( '~\A/[A-Za-z0-9/_-]+\z~D', $accel_prefix ) && false === strpos( $accel_prefix, '..' ) ) {
++			header( 'X-Accel-Redirect: ' . rtrim( $accel_prefix, '/' ) . '/' . self::files()->relative_path( $job['id'], $extension ) );
++			exit;
++		}
++		if ( defined( 'WC_LARGE_EXPORT_X_SENDFILE' ) && true === WC_LARGE_EXPORT_X_SENDFILE ) {
++			header( 'X-Sendfile: ' . $path );
++			exit;
++		}
++		if ( 'HEAD' === $method ) {
++			exit;
++		}
++
++		$stream = fopen( $path, 'rb' );
++		if ( false === $stream || 0 !== fseek( $stream, $start ) ) {
++			if ( is_resource( $stream ) ) {
++				fclose( $stream );
++			}
++			wp_die( esc_html__( 'The verified export file could not be opened.', 'woocommerce' ), '', array( 'response' => 500 ) );
++		}
++		$output = fopen( 'php://output', 'wb' );
++		if ( false === $output ) {
++			fclose( $stream );
++			wp_die( esc_html__( 'The verified export file could not be streamed.', 'woocommerce' ), '', array( 'response' => 500 ) );
++		}
++		$sent = stream_copy_to_stream( $stream, $output, $length );
++		fclose( $stream );
++		fclose( $output );
++		if ( false === $sent || $sent !== $length ) {
++			error_log( 'WooCommerce large product export download ended before the verified byte range was sent.' );
++		}
++		exit;
++	}
++
++	/** Parse one RFC 7233 byte range, honoring If-Range validators. */
++	private static function requested_range( int $size, string $etag, int $modified ) {
++		if ( empty( $_SERVER['HTTP_RANGE'] ) ) {
++			return null;
++		}
++		// WordPress also magic-quotes $_SERVER; quoted ETags must be unslashed.
++		$if_range = isset( $_SERVER['HTTP_IF_RANGE'] ) ? trim( wp_unslash( $_SERVER['HTTP_IF_RANGE'] ) ) : '';
++		if ( '' !== $if_range && ! hash_equals( $etag, $if_range ) && strtotime( $if_range ) !== $modified ) {
++			return null;
++		}
++		$header = trim( wp_unslash( (string) $_SERVER['HTTP_RANGE'] ) );
++		if ( ! preg_match( '/\Abytes=([0-9]*)-([0-9]*)\z/D', $header, $matches ) || 0 === $size ) {
++			return false;
++		}
++		if ( '' === $matches[1] ) {
++			$suffix = (int) $matches[2];
++			return $suffix > 0 ? array( max( 0, $size - $suffix ), $size - 1 ) : false;
++		}
++		$start = (int) $matches[1];
++		$end   = '' === $matches[2] ? $size - 1 : min( (int) $matches[2], $size - 1 );
++		return $start < $size && $end >= $start ? array( $start, $end ) : false;
++	}
++
++	/** Queue a job independently of any browser request. */
++	public static function enqueue( string $job_id, int $delay = 0 ): void {
++		if ( 'cli' === self::runner() ) {
++			return;
++		}
++		$timestamp = time() + max( 1, min( 900, $delay ) );
++		if ( 'cron' !== self::runner() && function_exists( 'as_enqueue_async_action' ) && function_exists( 'as_schedule_single_action' ) ) {
++			// Always create one delayed successor: a unique async action could be
++			// deduplicated against the currently executing worker action.
++			$action_id = as_schedule_single_action( $timestamp, self::WORKER_HOOK, array( $job_id ), self::ACTION_GROUP, false );
++			if ( $action_id ) {
++				return;
++			}
++		}
++		self::schedule_fallback( $job_id, $delay );
++	}
++
++	/** Explicitly isolate CLI-only installations from checkout/email queue runners. */
++	private static function runner(): string {
++		$runner = defined( 'WC_LARGE_EXPORT_RUNNER' ) ? WC_LARGE_EXPORT_RUNNER : 'action-scheduler';
++		if ( ! in_array( $runner, array( 'cli', 'action-scheduler', 'cron' ), true ) ) {
++			throw new \RuntimeException( 'Invalid large export runner configuration.' );
++		}
++		return $runner;
++	}
++
++	private static function schedule_fallback( string $job_id, int $delay ): void {
++		$args = array( $job_id );
++		if ( ! wp_next_scheduled( self::WORKER_HOOK, $args ) ) {
++			wp_schedule_single_event( time() + max( 1, min( 900, $delay ) ), self::WORKER_HOOK, $args );
++		}
++	}
++
++	/** Return a safe summary, current-user nonce, and verified download URL. */
++	public static function summary( array $job ): array {
++		$data                  = Engine::summary( $job );
++		$data['control_nonce'] = wp_create_nonce( 'woocommerce-large-export-' . $job['id'] );
++		$data['download_url']  = 'completed' === $job['status']
++			? wp_nonce_url( admin_url( 'admin-post.php?action=woocommerce_large_export_download&job_id=' . rawurlencode( $job['id'] ) ), 'woocommerce-large-export-download-' . $job['id'] )
++			: '';
++		return $data;
++	}
++
++	private static function post_strings( string $key, int $limit ): array {
++		if ( ! isset( $_POST[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
++			return array();
++		}
++		$values = wp_unslash( $_POST[ $key ] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
++		if ( ! is_array( $values ) || count( $values ) > $limit ) {
++			throw new \InvalidArgumentException( __( 'The export selection is invalid.', 'woocommerce' ) );
++		}
++		$clean = array();
++		foreach ( $values as $value ) {
++			if ( ! is_string( $value ) || '' === $value || strlen( $value ) > 250 ) {
++				throw new \InvalidArgumentException( __( 'The export selection is invalid.', 'woocommerce' ) );
++			}
++			$clean[] = sanitize_text_field( $value );
++		}
++		return array_values( array_unique( $clean ) );
++	}
++
++	private static function require_export_capability(): void {
++		if ( ! Engine::allowed( get_current_user_id() ) ) {
++			wp_die( esc_html__( 'You are not allowed to export products.', 'woocommerce' ), '', array( 'response' => 403 ) );
++		}
++	}
++
++	private static function require_export_capability_json(): void {
++		if ( ! Engine::allowed( get_current_user_id() ) ) {
++			wp_send_json_error( array( 'message' => __( 'You are not allowed to export products.', 'woocommerce' ) ), 403 );
++		}
++	}
++
++	private static function require_job_access( ?array $job ): void {
++		if ( ! $job ) {
++			throw new \InvalidArgumentException( __( 'The export job does not exist.', 'woocommerce' ) );
++		}
++		if ( get_current_user_id() !== (int) $job['user_id'] && ! current_user_can( 'manage_options' ) ) {
++			throw new \InvalidArgumentException( __( 'You cannot access this export job.', 'woocommerce' ) );
++		}
++	}
++
++	private static function store(): Store {
++		if ( ! self::$store ) {
++			self::$store = new Store();
++			self::$store->install();
++		}
++		return self::$store;
++	}
++
++	private static function files(): Files {
++		if ( ! self::$files ) {
++			self::$files = new Files();
++		}
++		return self::$files;
++	}
++
++	private static function engine(): Engine {
++		if ( ! self::$engine ) {
++			self::$engine = new Engine( self::store(), self::files() );
++		}
++		return self::$engine;
++	}
++}
+diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php
+new file mode 100644
+index 00000000..f23e3fa5
+--- /dev/null
++++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php
+@@ -0,0 +1,465 @@
++<?php
++/**
++ * Bounded product selection and row transformation for background exports.
++ *
++ * @package WooCommerce\Export
++ */
++
++namespace Automattic\WooCommerce\Internal\LargeExport;
++
++use RuntimeException;
++use WC_Data_Store;
++
++defined( 'ABSPATH' ) || exit;
++
++require_once WC_ABSPATH . 'includes/export/class-wc-product-csv-exporter.php';
++
++/**
++ * Reuses the existing WooCommerce column and product serialization hooks.
++ */
++final class Reader extends \WC_Product_CSV_Exporter {
++	/**
++	 * Preserve formula-like values for CSVs explicitly intended for import.
++	 *
++	 * @var bool
++	 */
++	private $spreadsheet;
++
++	public function __construct( array $config ) {
++		// This class can be loaded while WooCommerce itself is bootstrapping.
++		// Defer the admin exporter until a worker/admin request has finished loading
++		// WordPress pluggable functions (the class constructor checks capabilities).
++		if ( ! class_exists( 'WC_Admin_Exporters', false ) ) {
++			require_once WC_ABSPATH . 'includes/admin/class-wc-admin-exporters.php';
++		}
++		parent::__construct();
++		$this->spreadsheet = $config['spreadsheet'];
++		$this->set_product_types_to_export( $config['types'] );
++		$this->set_columns_to_export( $config['columns'] );
++		$this->set_product_category_to_export( $config['categories'] ?? array() );
++		$this->set_product_ids_to_export( $config['ids'] ?? array() );
++		$this->enable_meta_export( $config['meta'] );
++	}
++
++	/** Capture the supported data store and insertion watermark without hydrating rows. */
++	public function source_boundary(): array {
++		global $wpdb;
++		$cpt = 'WC_Product_Data_Store_CPT' === WC_Data_Store::load( 'product' )->get_current_class_name();
++		$max = $cpt ? $wpdb->get_var( "SELECT MAX(ID) FROM {$wpdb->posts}" ) : null;
++		if ( $cpt && $wpdb->last_error ) {
++			throw new RuntimeException( 'The product ID watermark could not be read.' );
++		}
++		return array(
++			'cpt'    => $cpt,
++			'max_id' => $cpt ? (int) $max : null,
++		);
++	}
++
++	public function escape_data( $data ) {
++		return $this->spreadsheet ? parent::escape_data( $data ) : $data;
++	}
++
++	/**
++	 * Initialize the checkpoint. Post IDs are an insertion boundary, not a snapshot.
++	 */
++	public function initialize( array $config ): array {
++		global $wpdb;
++
++		$source  = $config['source'] ?? $this->source_boundary();
++		$cpt     = ! empty( $source['cpt'] );
++		$current = 'WC_Product_Data_Store_CPT' === WC_Data_Store::load( 'product' )->get_current_class_name();
++		if ( $cpt !== $current ) {
++			throw new RuntimeException( 'The product data store changed. Start a new export.' );
++		}
++		$state = array(
++			'index'       => 0,
++			'rows'        => 0,
++			'bytes'       => 0,
++			'cursor'      => 0,
++			'page'        => 1,
++			'parents'     => array(),
++			'child'       => 0,
++			'columns'     => $this->columns(),
++			'raw_columns' => $this->get_column_names(),
++			'max_id'      => $source['max_id'],
++			'mode'        => $cpt ? $config['mode'] : 'compatibility',
++			'cpt'         => $cpt,
++		);
++		if ( $cpt ) {
++			// A cheap upper bound for the default catalog selection. Filtered totals may be unknown.
++			if ( $config['estimate'] && Engine::STATUSES === $config['statuses'] &&
++				! $config['ids'] && ! $config['categories'] && array_keys( \WC_Admin_Exporters::get_product_types() ) === $config['types'] &&
++				! has_filter( 'woocommerce_product_export_product_query_args' ) && ! has_filter( 'woocommerce_product_object_query_args' ) &&
++				! has_filter( 'woocommerce_product_object_query' ) && ! has_filter( 'woocommerce_product_data_store_cpt_get_products_query' ) ) {
++				$estimate = $wpdb->get_var( $wpdb->prepare( 'SELECT SUM(TABLE_ROWS) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $wpdb->posts ) );
++				if ( ! $wpdb->last_error && (int) $estimate > 0 ) {
++					$state['estimate'] = (int) $estimate;
++				}
++			}
++		}
++		return $state;
++	}
++
++	/**
++	 * Select a single batch and advance a proposed checkpoint. The caller commits it
++	 * only after the corresponding chunk is durable.
++	 */
++	public function select( array $config, array $state, int $limit ): array {
++		$query_start = microtime( true );
++		$current_cpt = 'WC_Product_Data_Store_CPT' === WC_Data_Store::load( 'product' )->get_current_class_name();
++		if ( $current_cpt !== (bool) $state['cpt'] ) {
++			throw new RuntimeException( 'The product data store changed. Start a new export.' );
++		}
++		$main = array(
++			'status'   => $config['statuses'],
++			'limit'    => $limit,
++			'page'     => $state['page'],
++			'orderby'  => array( 'ID' => 'ASC' ),
++			'return'   => 'objects',
++			'paginate' => false,
++			'type'     => $config['types'],
++		);
++		if ( $config['ids'] ) {
++			$main['include'] = $config['ids'];
++			$main['type']    = array_keys( \WC_Admin_Exporters::get_product_types() );
++		} elseif ( $config['categories'] ) {
++			$main['category'] = $config['categories'];
++		}
++		$main             = apply_filters( 'woocommerce_product_export_product_query_args', $main );
++		$fingerprint_args = $main;
++		unset( $fingerprint_args['page'], $fingerprint_args['limit'], $fingerprint_args['return'], $fingerprint_args['paginate'] );
++		$fingerprint = hash( 'sha256', wp_json_encode( $fingerprint_args, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR ) );
++		if ( isset( $state['query_fingerprint'] ) && ! hash_equals( $state['query_fingerprint'], $fingerprint ) ) {
++			throw new RuntimeException( 'The product export query changed while the job was running. Start a new export.' );
++		}
++		$state['query_fingerprint'] = $fingerprint;
++		$main['limit']              = min( $limit, max( 1, (int) $main['limit'] ) );
++		$main['return']             = 'objects';
++		$main['paginate']           = false;
++		if ( 'keyset' === $state['mode'] && ( array( 'ID' => 'ASC' ) !== $main['orderby'] || ! empty( $main['offset'] ) ) ) {
++			if ( $state['cursor'] || $state['rows'] ) {
++				throw new RuntimeException( 'The product query order changed during export. Start a new export.' );
++			}
++			$state['mode'] = 'compatibility';
++		}
++		// OFFSET pages must retain their original width. A changing limit shifts
++		// every subsequent page and can silently duplicate or omit products.
++		if ( 'compatibility' === $state['mode'] ) {
++			if ( isset( $state['page_limit'] ) && $state['page_limit'] !== $main['limit'] ) {
++				throw new RuntimeException( 'The product query page size changed during export. Start a new export.' );
++			}
++			$state['page_limit'] = $main['limit'];
++		}
++
++		if ( $state['parents'] ) {
++			$child_limit = $main['limit'];
++			$parent      = reset( $state['parents'] );
++			$args        = array(
++				'parent'   => $parent,
++				'type'     => 'variation',
++				// The legacy parent-expansion query uses WC_Product_Query defaults
++				// (which exclude scheduled variations), unless a new status filter is explicit.
++				'status'   => $config['child_statuses'] ?? $config['statuses'],
++				'return'   => 'objects',
++				'orderby'  => array( 'ID' => 'ASC' ),
++				'limit'    => $child_limit,
++				'page'     => 1 + (int) ( $state['child_page'] ?? 0 ),
++				'paginate' => false,
++			);
++			$products    = $this->query( $args, $state, $state['child'] );
++			if ( $products ) {
++				$state['child']      = end( $products )->get_id();
++				$state['child_page'] = $args['page'];
++			}
++			if ( count( $products ) < $child_limit ) {
++				array_shift( $state['parents'] );
++				$state['child']      = 0;
++				$state['child_page'] = 0;
++			}
++			// A variation queried directly as well as through its parent belongs in the CSV once.
++			if ( $products && ( ! empty( $main['include'] ) || ! empty( $main['category'] ) ) ) {
++				$ids             = array_map(
++					static function ( $product ) {
++						return $product->get_id();
++					},
++					$products
++				);
++				$main['include'] = empty( $main['include'] ) ? $ids : array_values( array_intersect( $ids, (array) $main['include'] ) );
++				if ( $main['include'] ) {
++					$main['page']  = 1;
++					$main['limit'] = count( $ids );
++					unset( $main['offset'] );
++					$direct     = $this->query( $main, $state, 0 );
++					$direct_ids = array_fill_keys(
++						array_map(
++							static function ( $product ) {
++								return $product->get_id();
++							},
++							$direct
++						),
++						true
++					);
++					$products   = array_filter(
++						$products,
++						static function ( $product ) use ( $direct_ids ) {
++							return ! isset( $direct_ids[ $product->get_id() ] );
++						}
++					);
++				}
++			}
++			return array( $products, $state, false, microtime( true ) - $query_start );
++		}
++
++		$products = $this->query( $main, $state, $state['cursor'] );
++		if ( ! $products ) {
++			return array( array(), $state, true, microtime( true ) - $query_start );
++		}
++		$state['cursor'] = end( $products )->get_id();
++		++$state['page'];
++		if ( ! empty( $main['include'] ) || ! empty( $main['category'] ) ) {
++			foreach ( $products as $product ) {
++				if ( $product->is_type( 'variable' ) ) {
++					$state['parents'][] = $product->get_id();
++				}
++			}
++		}
++		return array( $products, $state, false, microtime( true ) - $query_start );
++	}
++
++	/**
++	 * Bound the WooCommerce CPT query without bypassing its query/term filters.
++	 */
++	private function query( array $args, array $state, int $cursor ): array {
++		global $wpdb;
++		$max_id      = $state['max_id'];
++		$keyset      = 'keyset' === $state['mode'];
++		$seen        = false;
++		$error       = false;
++		$marker      = wp_generate_uuid4();
++		$bounded_cpt = ! empty( $state['cpt'] ) && null !== $max_id;
++		$prime_meta  = $keyset && self::native_hooks_only( array( 'woocommerce_data_stores', 'woocommerce_product_data_store', 'woocommerce_product_variation_data_store', 'woocommerce_product_class' ) );
++		$meta_primed = false;
++		if ( $bounded_cpt ) {
++			$args['wc_large_export_query'] = $marker;
++			if ( $prime_meta ) {
++				$args['cache_results'] = false;
++			}
++		}
++		if ( $keyset ) {
++			$args['page'] = 1;
++		}
++		$where    = null;
++		$results  = null;
++		$simplify = null;
++		$split    = null;
++		if ( $bounded_cpt ) {
++			if ( $prime_meta ) {
++				// Prime bounded metadata groups before WP/CRUD hydration. Native
++				// IN(1000+) meta cache queries can become whole-table scans on MariaDB.
++				$split = static function ( $value, $query ) use ( $marker ) {
++					return $marker === $query->get( 'wc_large_export_query' ) ? false : $value;
++				};
++			}
++			if ( $keyset && is_array( $args['type'] ) && in_array( 'variation', $args['type'], true ) &&
++				self::native_hooks_only( array( 'get_terms', 'get_terms_args', 'get_terms_defaults', 'terms_clauses', 'pre_get_terms', 'terms_pre_query', 'get_terms_fields', 'get_terms_orderby', 'list_terms_exclusions' ) ) ) {
++				// WC's "selected type OR no type" condition is a tautology ONLY
++				// when the selection covers every actual product_type term. Removing
++				// that exact clause avoids MariaDB materializing all product type
++				// relationships on every cursor batch. Unknown types retain native SQL.
++				$actual_types = $wpdb->get_col( $wpdb->prepare( "SELECT t.slug FROM {$wpdb->terms} t INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_id=t.term_id WHERE tt.taxonomy=%s LIMIT 101", 'product_type' ) );
++				if ( $wpdb->last_error ) {
++					throw new RuntimeException( 'The product database query failed.' );
++				}
++				if ( count( $actual_types ) <= 100 && ! array_diff( $actual_types, $args['type'] ) ) {
++					$expected = array(
++						'relation' => 'OR',
++						array(
++							'taxonomy' => 'product_type',
++							'field'    => 'slug',
++							'terms'    => $args['type'],
++						),
++						array(
++							'taxonomy' => 'product_type',
++							'field'    => 'id',
++							'operator' => 'NOT EXISTS',
++						),
++					);
++					$simplify = static function ( $wp_args, $query_vars ) use ( $marker, $expected ) {
++						if ( ( $query_vars['wc_large_export_query'] ?? null ) === $marker && isset( $wp_args['tax_query'] ) && 'AND' === ( $wp_args['tax_query']['relation'] ?? 'AND' ) ) {
++							foreach ( $wp_args['tax_query'] as $key => $clause ) {
++								if ( $expected === $clause ) {
++									unset( $wp_args['tax_query'][ $key ] );
++								}
++							}
++						}
++						return $wp_args;
++					};
++					add_filter( 'woocommerce_product_data_store_cpt_get_products_query', $simplify, PHP_INT_MAX, 2 );
++				}
++			}
++			$where   = static function ( $sql, $query ) use ( &$seen, $max_id, $cursor, $keyset, $marker, $wpdb ) {
++				if ( $marker === $query->get( 'wc_large_export_query' ) ) {
++					$seen = true;
++					$sql .= $wpdb->prepare( " AND {$wpdb->posts}.ID <= %d", $max_id );
++					if ( $keyset ) {
++						$sql .= $wpdb->prepare( " AND {$wpdb->posts}.ID > %d", $cursor );
++					}
++				}
++				return $sql;
++			};
++			$results = static function ( $posts, $query ) use ( &$error, &$meta_primed, $prime_meta, $marker, $wpdb, $args ) {
++				if ( $marker === $query->get( 'wc_large_export_query' ) && $wpdb->last_error ) {
++					$error = true;
++				}
++				if ( ! $error && $prime_meta && $posts && $marker === $query->get( 'wc_large_export_query' ) ) {
++					if ( count( $posts ) > $args['limit'] ) {
++						throw new RuntimeException( 'A product query override does not support bounded background export. Use the legacy exporter.' );
++					}
++					self::prime_crud_metadata( $posts );
++					$meta_primed = true;
++				}
++				return $posts;
++			};
++			add_filter( 'posts_where', $where, PHP_INT_MAX, 2 );
++			add_filter( 'posts_results', $results, PHP_INT_MIN, 2 );
++			if ( $split ) {
++				add_filter( 'split_the_query', $split, PHP_INT_MAX, 2 );
++			}
++		}
++		try {
++			$products = wc_get_products( $args );
++			if ( $error || $wpdb->last_error ) {
++				throw new RuntimeException( 'The product database query failed.' );
++			}
++		} finally {
++			if ( $bounded_cpt ) {
++				remove_filter( 'posts_where', $where, PHP_INT_MAX );
++				remove_filter( 'posts_results', $results, PHP_INT_MIN );
++				if ( $simplify ) {
++					remove_filter( 'woocommerce_product_data_store_cpt_get_products_query', $simplify, PHP_INT_MAX );
++				}
++				if ( $split ) {
++					remove_filter( 'split_the_query', $split, PHP_INT_MAX );
++				}
++			}
++		}
++		if ( ! is_array( $products ) || ( $bounded_cpt && ! $seen ) || count( $products ) > $args['limit'] ) {
++			throw new RuntimeException( 'A product query override does not support bounded background export. Use the legacy exporter.' );
++		}
++		$previous = $cursor;
++		$ids      = array();
++		foreach ( $products as $product ) {
++			$id = $product instanceof \WC_Product ? $product->get_id() : 0;
++			if ( ! $id || isset( $ids[ $id ] ) || ( $keyset && $id <= $previous ) || ( $bounded_cpt && $id > $max_id ) ) {
++				throw new RuntimeException( 'The product query returned unexpected IDs. Use the compatibility mode or legacy exporter.' );
++			}
++			$ids[ $id ] = true;
++			$previous   = $id;
++		}
++		if ( $prime_meta && ! $meta_primed && $products ) {
++			self::prime_crud_metadata( $products );
++		}
++		return $products;
++	}
++
++	/**
++	 * Core installs hooks even on an otherwise clean site. Permit only callbacks
++	 * audited in this WooCommerce/WordPress baseline; extensions conservatively
++	 * keep native term resolution and metadata hydration.
++	 *
++	 * @param string[] $hooks Hooks whose extension callbacks would change semantics.
++	 * @return bool
++	 */
++	private static function native_hooks_only( array $hooks ): bool {
++		$allowed = array(
++			'_post_format_get_terms',
++			'wc_change_term_counts',
++			'wc_terms_clauses',
++			'wc_change_pre_get_terms',
++			'wc_change_get_terms_defaults',
++			array( 'Automattic\\WooCommerce\\Admin\\API\\Init', 'add_data_stores' ),
++		);
++		foreach ( $hooks as $hook ) {
++			if ( ! isset( $GLOBALS['wp_filter'][ $hook ] ) ) {
++				continue;
++			}
++			foreach ( $GLOBALS['wp_filter'][ $hook ]->callbacks as $callbacks ) {
++				foreach ( $callbacks as $callback ) {
++					if ( ! in_array( $callback['function'], $allowed, true ) ) {
++						return false;
++					}
++				}
++			}
++		}
++		return true;
++	}
++
++	/**
++	 * WordPress's post_meta cache omits meta IDs, so WC_Data otherwise issues a
++	 * separate read_meta() query per product even after update_post_meta_cache().
++	 * Prime WC's raw cache before rows access lazy custom metadata. Each object's
++	 * data store still invokes filter_raw_meta_data() and the existing meta hooks.
++	 * Custom product classes/data stores retain their own unmodified hydration.
++	 *
++	 * @param array $posts Only the bounded, marked CPT query's result.
++	 */
++	private static function prime_crud_metadata( array $posts ): void {
++		global $wpdb;
++		$ids = array();
++		foreach ( $posts as $post ) {
++			$id = $post instanceof \WC_Product ? $post->get_id() : ( is_object( $post ) ? (int) $post->ID : (int) $post );
++			if ( $id > 0 ) {
++				$ids[ $id ] = array();
++			}
++		}
++		if ( ! $ids ) {
++			return;
++		}
++		foreach ( array_chunk( array_keys( $ids ), 500 ) as $group ) {
++			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT post_id, meta_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id IN (" . implode( ',', array_fill( 0, count( $group ), '%d' ) ) . ') ORDER BY meta_id', $group ) );
++			if ( $wpdb->last_error ) {
++				throw new RuntimeException( 'The product database query failed.' );
++			}
++			$wp_meta = array_fill_keys( $group, array() );
++			foreach ( $rows as $row ) {
++				$id = (int) $row->post_id;
++				unset( $row->post_id );
++				$ids[ $id ][]                       = $row;
++				$wp_meta[ $id ][ $row->meta_key ][] = $row->meta_value;
++			}
++			foreach ( $wp_meta as $id => $values ) {
++				wp_cache_add( $id, $values, 'post_meta' );
++			}
++		}
++		\WC_Data::prime_raw_meta_data_cache( $ids, 'products' );
++	}
++
++	/**
++	 * Discover and format one row at a time while retaining WooCommerce CRUD getters.
++	 */
++	public function rows( array $products ): iterable {
++		if ( $products && method_exists( $this, 'prime_export_batch_caches' ) ) {
++			$this->prime_export_batch_caches( $products );
++		}
++		foreach ( $products as $product ) {
++			$row = $this->generate_row_data( $product );
++			if ( ! is_array( $row ) ) {
++				throw new RuntimeException( 'A product export row hook did not return a row.' );
++			}
++			foreach ( $row as $key => $value ) {
++				$row[ $key ] = (string) $this->format_data( $value );
++			}
++			yield $row;
++		}
++	}
++
++	public function columns(): array {
++		$columns = array();
++		foreach ( $this->get_column_names() as $key => $label ) {
++			if ( $this->is_column_exporting( $key ) ) {
++				$columns[ $key ] = (string) $this->format_data( $label );
++			}
++		}
++		return $columns;
++	}
++}
+diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-store.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-store.php
+new file mode 100644
+index 00000000..f00729ed
+--- /dev/null
++++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-store.php
+@@ -0,0 +1,604 @@
++<?php
++/**
++ * Durable database storage for large product export jobs.
++ *
++ * @package WooCommerce\Export
++ */
++
++namespace Automattic\WooCommerce\Internal\LargeExport;
++
++defined( 'ABSPATH' ) || exit;
++
++/**
++ * Persists export state using optimistic updates and per-job lease tokens.
++ */
++final class Store {
++
++	const SCHEMA_VERSION = 1;
++	const LEASE_SECONDS  = 300;
++	const MAX_ATTEMPTS   = 5;
++
++	const RUNNABLE = array( 'pending', 'queued', 'running', 'pausing', 'cancelling', 'finalizing', 'verifying' );
++
++	/**
++	 * Install the site-local job table on first use.
++	 */
++	public function install(): void {
++		global $wpdb;
++		if ( self::SCHEMA_VERSION === (int) get_option( 'woocommerce_large_export_schema_version' ) ) {
++			return;
++		}
++
++		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
++		$table   = $this->table();
++		$collate = $wpdb->get_charset_collate();
++		dbDelta(
++			"CREATE TABLE $table (
++				id varchar(36) NOT NULL,
++				user_id bigint(20) unsigned NOT NULL,
++				request_key char(64) DEFAULT NULL,
++				status varchar(16) NOT NULL,
++				resume_status varchar(16) NOT NULL DEFAULT '',
++				config longtext NOT NULL,
++				checkpoint longtext NOT NULL,
++				logs text NOT NULL,
++				revision bigint(20) unsigned NOT NULL DEFAULT 0,
++				lease_token varchar(36) NOT NULL DEFAULT '',
++				lease_until bigint(20) unsigned NOT NULL DEFAULT 0,
++				heartbeat_at bigint(20) unsigned NOT NULL DEFAULT 0,
++				available_at bigint(20) unsigned NOT NULL DEFAULT 0,
++				created_at bigint(20) unsigned NOT NULL,
++				started_at bigint(20) unsigned NOT NULL DEFAULT 0,
++				updated_at bigint(20) unsigned NOT NULL,
++				completed_at bigint(20) unsigned NOT NULL DEFAULT 0,
++				attempts int(10) unsigned NOT NULL DEFAULT 0,
++				last_error text NOT NULL,
++				PRIMARY KEY  (id),
++				UNIQUE KEY request_key (request_key),
++				KEY owner_jobs (user_id,created_at),
++				KEY queue (status,available_at,lease_until),
++				KEY retention (status,updated_at)
++			) $collate;"
++		);
++
++		$required = array( 'id', 'user_id', 'request_key', 'status', 'resume_status', 'config', 'checkpoint', 'logs', 'revision', 'lease_token', 'lease_until', 'heartbeat_at', 'available_at', 'created_at', 'started_at', 'updated_at', 'completed_at', 'attempts', 'last_error' );
++		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Site-local table identifier.
++		$columns = $wpdb->get_col( "SHOW COLUMNS FROM $table" );
++		if ( $wpdb->last_error || array_diff( $required, $columns ) ) {
++			throw new \RuntimeException( 'The large export job table could not be installed.' );
++		}
++		update_option( 'woocommerce_large_export_schema_version', self::SCHEMA_VERSION, false );
++	}
++
++	/**
++	 * Create a job, or return the job for a previously submitted request token.
++	 *
++	 * @param int   $user User ID.
++	 * @param array $config Validated export configuration.
++	 * @return array
++	 */
++	public function create( int $user, array $config ): array {
++		global $wpdb;
++		$this->install();
++		$config['schema_version'] = self::SCHEMA_VERSION;
++		$request_key              = null;
++		if ( isset( $config['request_id'] ) ) {
++			if ( ! is_string( $config['request_id'] ) || ! preg_match( '/\A[A-Za-z0-9_-]{1,128}\z/D', $config['request_id'] ) ) {
++				throw new \InvalidArgumentException( 'Invalid export request ID.' );
++			}
++			$request_key = hash( 'sha256', $user . ':' . $config['request_id'] );
++			unset( $config['request_id'] );
++		}
++
++		$now = time();
++		$id  = wp_generate_uuid4();
++		$row = array(
++			'id'           => $id,
++			'user_id'      => $user,
++			'request_key'  => $request_key,
++			'status'       => 'queued',
++			'config'       => $this->encode( $config ),
++			'checkpoint'   => '{}',
++			'logs'         => $this->encode(
++				array(
++					array(
++						'at'     => $now,
++						'status' => 'queued',
++					),
++				)
++			),
++			'available_at' => $now,
++			'created_at'   => $now,
++			'updated_at'   => $now,
++			'last_error'   => '',
++		);
++		// A duplicate request token is expected when a browser repeats a Start request.
++		$suppressed = $wpdb->suppress_errors( true );
++		try {
++			$inserted = $wpdb->insert( $this->table(), $row, array_values( $this->formats( $row ) ) );
++		} finally {
++			$wpdb->suppress_errors( $suppressed );
++		}
++		if ( false === $inserted && $request_key ) {
++			$table = $this->table();
++			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Site-local table identifier.
++			$existing = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table WHERE request_key = %s AND user_id = %d", $request_key, $user ) );
++			if ( $existing ) {
++				return $this->required( $existing );
++			}
++		}
++		if ( 1 !== $inserted ) {
++			throw new \RuntimeException( 'The large export job could not be created.' );
++		}
++		return $this->required( $id );
++	}
++
++	/**
++	 * Read one job.
++	 *
++	 * @param string $id Job ID.
++	 * @return array|null
++	 */
++	public function get( string $id ): ?array {
++		global $wpdb;
++		if ( ! preg_match( '/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/D', $id ) ) {
++			return null;
++		}
++		$this->install();
++		$table = $this->table();
++		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Site-local table identifier.
++		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %s", $id ), ARRAY_A );
++		$this->check_read();
++		return $row ? $this->decode( $row ) : null;
++	}
++
++	/**
++	 * List a user's newest jobs in bounded pages for the admin screen.
++	 *
++	 * @param int $user User ID.
++	 * @return array
++	 */
++	public function recent( int $user ): array {
++		global $wpdb;
++		$this->install();
++		$table = $this->table();
++		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Site-local table identifier.
++		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $table WHERE user_id = %d ORDER BY created_at DESC, id DESC LIMIT 20", $user ), ARRAY_A );
++		$this->check_read();
++		return array_map( array( $this, 'decode' ), $rows );
++	}
++
++	/**
++	 * Return a bounded list of ready job IDs, including expired leases.
++	 *
++	 * @return string[]
++	 */
++	public function due(): array {
++		global $wpdb;
++		$this->install();
++		$table = $this->table();
++		$now   = time();
++		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Site-local table identifier and fixed status literals.
++		$rows = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM $table WHERE status IN ('pending','queued','running','pausing','cancelling','finalizing','verifying') AND available_at <= %d AND lease_until <= %d ORDER BY updated_at ASC, created_at ASC, id ASC LIMIT 32", $now, $now ) );
++		$this->check_read();
++		return $rows;
++	}
++
++	/**
++	 * Claim runnable work using an atomic compare-and-swap.
++	 *
++	 * @param string $id Job ID.
++	 * @return array|null Claimed job, or null if another worker owns it.
++	 */
++	public function claim( string $id ): ?array {
++		$job = $this->get( $id );
++		$now = time();
++		if ( ! $job || ! in_array( $job['status'], self::RUNNABLE, true ) || $job['available_at'] > $now || $job['lease_until'] > $now ) {
++			return null;
++		}
++
++		$changes = array(
++			'lease_token'  => wp_generate_uuid4(),
++			'lease_until'  => $now + self::LEASE_SECONDS,
++			'heartbeat_at' => $now,
++		);
++		if ( '' !== $job['lease_token'] ) {
++			// A fatal error or killed process cannot call failure(). Charge abandoned
++			// leases against the same bounded retry budget instead of looping forever.
++			$changes['attempts']   = $job['attempts'] + 1;
++			$changes['last_error'] = 'The previous worker lease expired before it was released.';
++			if ( $changes['attempts'] >= self::MAX_ATTEMPTS ) {
++				$changes['status']        = 'failed';
++				$changes['resume_status'] = $job['status'];
++				$changes['lease_token']   = '';
++				$changes['lease_until']   = 0;
++				$this->update( $job, $changes );
++				return null;
++			}
++		}
++		if ( in_array( $job['status'], array( 'pending', 'queued' ), true ) ) {
++			$changes['status'] = 'running';
++		}
++		if ( ! $job['started_at'] ) {
++			$changes['started_at'] = $now;
++		}
++		if ( ! $this->update( $job, $changes ) ) {
++			return null;
++		}
++		// A simultaneous operator update can already appear in the returned job.
++		$claimed = $this->required( $id );
++		return $changes['lease_token'] === $claimed['lease_token'] ? $claimed : null;
++	}
++
++	/**
++	 * Persist a checkpoint and renew the lease. A control request wins a race
++	 * with a normal worker state transition; completed work is still recorded.
++	 *
++	 * @param array $job     Claimed job containing the worker's lease token.
++	 * @param array $changes State or checkpoint fields.
++	 */
++	public function save( array $job, array $changes ): void {
++		$fields = array( 'checkpoint', 'status', 'available_at', 'attempts', 'last_error' );
++		if ( array_diff( array_keys( $changes ), $fields ) ) {
++			throw new \InvalidArgumentException( 'Unsupported large export checkpoint fields.' );
++		}
++		if ( isset( $changes['checkpoint'] ) && ! is_array( $changes['checkpoint'] ) ) {
++			throw new \InvalidArgumentException( 'Invalid large export checkpoint.' );
++		}
++		if ( isset( $changes['checkpoint'] ) ) {
++			$changes['checkpoint'] = $this->encode( $changes['checkpoint'] );
++		}
++		if ( isset( $changes['last_error'] ) ) {
++			$changes['last_error'] = $this->error_text( $changes['last_error'] );
++		}
++
++		$this->mutate_owned(
++			$job,
++			function ( array $current ) use ( $changes ): array {
++				$now           = time();
++				$state         = $current['status'];
++				$worker_states = array(
++					'running'    => array( 'queued', 'finalizing', 'failed' ),
++					'finalizing' => array( 'verifying', 'failed' ),
++					'verifying'  => array( 'completed', 'failed' ),
++					'pausing'    => array( 'paused', 'failed' ),
++					'cancelling' => array( 'cancelled', 'failed' ),
++				);
++				if ( isset( $changes['status'] ) && $changes['status'] !== $state ) {
++					if ( ! in_array( $changes['status'], $worker_states[ $state ] ?? array(), true ) ) {
++						if ( in_array( $state, array( 'pausing', 'cancelling' ), true ) ) {
++							unset( $changes['status'] );
++						} else {
++							throw new \LogicException( 'Invalid large export worker state change.' );
++						}
++					}
++					if ( isset( $changes['status'] ) && 'completed' === $changes['status'] ) {
++						$changes['completed_at'] = $now;
++					}
++					if ( isset( $changes['status'] ) && 'failed' === $changes['status'] ) {
++						$changes['resume_status'] = $state;
++					}
++				}
++				$changes['heartbeat_at'] = $now;
++				$changes['lease_until']  = $now + self::LEASE_SECONDS;
++				return $changes;
++			}
++		);
++	}
++
++	/**
++	 * Release a lease only when it still belongs to this worker.
++	 *
++	 * @param array $job Claimed job containing the lease token.
++	 */
++	public function release( array $job ): void {
++		global $wpdb;
++		if ( empty( $job['lease_token'] ) ) {
++			return;
++		}
++		$table = $this->table();
++		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Site-local table identifier.
++		$released = $wpdb->query( $wpdb->prepare( "UPDATE $table SET lease_token = '', lease_until = 0, revision = revision + 1 WHERE id = %s AND lease_token = %s", $job['id'], $job['lease_token'] ) );
++		if ( false === $released ) {
++			throw new \RuntimeException( 'The large export lease could not be released.' );
++		}
++	}
++
++	/**
++	 * Apply one operator command. Ownership is checked by the caller.
++	 *
++	 * @param string $id     Job ID.
++	 * @param string $action Pause, resume, cancel, retry or expire.
++	 * @return array
++	 */
++	public function control( string $id, string $action ): array {
++		for ( $try = 0; $try < 5; ++$try ) {
++			$job     = $this->required( $id );
++			$changes = $this->control_changes( $job, $action );
++			if ( ! $changes ) {
++				return $job;
++			}
++			if ( $this->update( $job, $changes ) ) {
++				return $this->required( $id );
++			}
++		}
++		throw new \RuntimeException( 'The large export state changed repeatedly. Please try again.' );
++	}
++
++	/**
++	 * Record a bounded automatic retry, preserving its phase and checkpoint.
++	 *
++	 * @param array  $job   Claimed job containing its lease token.
++	 * @param string $error Safe diagnostic suitable for the export UI.
++	 */
++	public function failure( array $job, string $error ): void {
++		$this->mutate_owned(
++			$job,
++			function ( array $current ) use ( $error ): array {
++				$attempts = $current['attempts'] + 1;
++				$state    = $current['status'];
++				$changes  = array(
++					'attempts'     => $attempts,
++					'last_error'   => $this->error_text( $error ),
++					'available_at' => time() + min( 900, 15 * ( 2 ** min( 6, $attempts - 1 ) ) ),
++				);
++				if ( $attempts >= self::MAX_ATTEMPTS && in_array( $state, array( 'running', 'finalizing', 'verifying', 'pausing', 'cancelling' ), true ) ) {
++					$changes['status']        = 'failed';
++					$changes['resume_status'] = $state;
++				}
++				return $changes;
++			}
++		);
++	}
++
++	/**
++	 * List old terminal jobs ready for a retention pass.
++	 *
++	 * @return string[]
++	 */
++	public function expires(): array {
++		global $wpdb;
++		$this->install();
++		$table  = $this->table();
++		$cutoff = $this->expiry_cutoff();
++		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Site-local table identifier.
++		$rows = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM $table WHERE (status IN ('completed','cancelled','failed') AND updated_at < %d AND lease_until <= %d) OR (status = 'expired' AND resume_status = 'purging') ORDER BY updated_at ASC LIMIT 32", $cutoff, time() ) );
++		$this->check_read();
++		return $rows;
++	}
++
++	/**
++	 * Resolve a requested state change using the latest row revision.
++	 *
++	 * @param array  $job    Current job.
++	 * @param string $action Requested action.
++	 * @return array
++	 */
++	private function control_changes( array $job, string $action ): array {
++		$state  = $job['status'];
++		$active = array( 'pending', 'queued', 'running', 'finalizing', 'verifying' );
++		$now    = time();
++		switch ( $action ) {
++			case 'pause':
++				if ( in_array( $state, array( 'pausing', 'paused' ), true ) ) {
++					return array();
++				}
++				if ( in_array( $state, $active, true ) ) {
++					return array(
++						'status'        => '' === $job['lease_token'] ? 'paused' : 'pausing',
++						'resume_status' => $state,
++						'available_at'  => $now,
++					);
++				}
++				break;
++			case 'resume':
++				if ( in_array( $state, array( 'paused', 'pausing' ), true ) ) {
++					return array(
++						'status'       => $job['resume_status'] ? $job['resume_status'] : 'queued',
++						'available_at' => $now,
++					);
++				}
++				break;
++			case 'cancel':
++				if ( in_array( $state, array( 'cancelling', 'cancelled' ), true ) ) {
++					return array();
++				}
++				if ( in_array( $state, self::RUNNABLE, true ) || in_array( $state, array( 'paused', 'failed' ), true ) ) {
++					return array(
++						'status'       => 'cancelling',
++						'available_at' => $now,
++						'attempts'     => 0,
++					);
++				}
++				break;
++			case 'retry':
++				if ( 'failed' === $state ) {
++					return array(
++						'status'       => $job['resume_status'] ? $job['resume_status'] : 'queued',
++						'attempts'     => 0,
++						'last_error'   => '',
++						'available_at' => $now,
++					);
++				}
++				break;
++			case 'expire':
++				if ( 'expired' === $state ) {
++					return array();
++				}
++				if ( in_array( $state, array( 'completed', 'cancelled', 'failed' ), true ) && $job['updated_at'] < $this->expiry_cutoff() && $job['lease_until'] <= $now ) {
++					return array(
++						'status'        => 'expired',
++						'resume_status' => 'purging',
++						'last_error'    => '',
++					);
++				}
++				break;
++			case 'purged':
++				if ( 'expired' === $state ) {
++					return 'purging' === $job['resume_status'] ? array( 'resume_status' => 'purged' ) : array();
++				}
++				break;
++		}
++		throw new \InvalidArgumentException( 'This action is unavailable for the current export job state.' );
++	}
++
++	/**
++	 * Run a worker-owned update after rebasing over any operator update.
++	 *
++	 * @param array    $job     Claimed job.
++	 * @param callable $changes Update callback.
++	 */
++	private function mutate_owned( array $job, callable $changes ): void {
++		for ( $try = 0; $try < 5; ++$try ) {
++			$current = $this->required( $job['id'] );
++			if ( empty( $job['lease_token'] ) || $job['lease_token'] !== $current['lease_token'] ) {
++				throw new \RuntimeException( 'The large export worker no longer holds its lease.' );
++			}
++			if ( $this->update( $current, $changes( $current ) ) ) {
++				return;
++			}
++		}
++		throw new \RuntimeException( 'The large export checkpoint could not be committed.' );
++	}
++
++	/**
++	 * Update a row only if it still matches the observed revision.
++	 *
++	 * @param array $job     Observed row.
++	 * @param array $changes Fields to update.
++	 * @return bool
++	 */
++	private function update( array $job, array $changes ): bool {
++		global $wpdb;
++		$now                   = time();
++		$changes['updated_at'] = $now;
++		$changes['revision']   = $job['revision'] + 1;
++		if ( ( isset( $changes['status'] ) && $changes['status'] !== $job['status'] ) || ! empty( $changes['last_error'] ) ) {
++			$entry = array(
++				'at'     => $now,
++				'status' => $changes['status'] ?? $job['status'],
++			);
++			if ( ! empty( $changes['last_error'] ) ) {
++				$entry['message'] = $changes['last_error'];
++			}
++			$changes['logs'] = $this->encode( array_slice( array_merge( $job['logs'], array( $entry ) ), -20 ) );
++		}
++		$result = $wpdb->update(
++			$this->table(),
++			$changes,
++			array(
++				'id'          => $job['id'],
++				'revision'    => $job['revision'],
++				'lease_token' => $job['lease_token'],
++			),
++			array_values( $this->formats( $changes ) ),
++			array( '%s', '%d', '%s' )
++		);
++		if ( false === $result ) {
++			throw new \RuntimeException( 'The large export job state could not be updated.' );
++		}
++		return 1 === $result;
++	}
++
++	/**
++	 * Read a job or surface a missing row.
++	 *
++	 * @param string $id Job ID.
++	 * @return array
++	 */
++	private function required( string $id ): array {
++		$job = $this->get( $id );
++		if ( null === $job ) {
++			throw new \InvalidArgumentException( 'The large export job does not exist.' );
++		}
++		return $job;
++	}
++
++	/**
++	 * Decode database rows and restore numeric field types.
++	 *
++	 * @param array $row Database row.
++	 * @return array
++	 */
++	private function decode( array $row ): array {
++		foreach ( array( 'config', 'checkpoint', 'logs' ) as $field ) {
++			$row[ $field ] = json_decode( $row[ $field ], true, 512, JSON_THROW_ON_ERROR );
++			if ( ! is_array( $row[ $field ] ) ) {
++				throw new \RuntimeException( 'Invalid large export state JSON.' );
++			}
++		}
++		if ( self::SCHEMA_VERSION !== ( $row['config']['schema_version'] ?? null ) ) {
++			throw new \RuntimeException( 'Unsupported large export configuration version.' );
++		}
++		foreach ( $this->formats( $row ) as $column => $format ) {
++			if ( '%d' === $format ) {
++				$row[ $column ] = (int) $row[ $column ];
++			}
++		}
++		unset( $row['request_key'] );
++		return $row;
++	}
++
++	/**
++	 * Map job columns to the types expected by wpdb.
++	 *
++	 * @param array $fields Fields in query order.
++	 * @return array
++	 */
++	private function formats( array $fields ): array {
++		$formats = array();
++		foreach ( $fields as $column => $value ) {
++			$formats[ $column ] = in_array( $column, array( 'user_id', 'revision', 'attempts', 'lease_until' ), true ) || substr( $column, -3 ) === '_at' ? '%d' : '%s';
++		}
++		return $formats;
++	}
++
++	/**
++	 * Encode a JSON field or throw before writing invalid state.
++	 *
++	 * @param array $data State to encode.
++	 * @return string
++	 */
++	private function encode( array $data ): string {
++		return json_encode( $data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Invalid input must throw instead of being coerced.
++	}
++
++	/**
++	 * Limit diagnostic size and keep error text unformatted.
++	 *
++	 * @param string $message Safe diagnostic text.
++	 * @return string
++	 */
++	private function error_text( string $message ): string {
++		return wp_html_excerpt( sanitize_text_field( $message ), 500 );
++	}
++
++	/**
++	 * Return the oldest retained terminal status timestamp.
++	 *
++	 * @return int
++	 */
++	private function expiry_cutoff(): int {
++		return time() - max( DAY_IN_SECONDS, (int) apply_filters( 'woocommerce_large_export_retention_seconds', 7 * DAY_IN_SECONDS ) );
++	}
++
++	/**
++	 * Fail fast if wpdb could not read the job table.
++	 */
++	private function check_read(): void {
++		global $wpdb;
++		if ( $wpdb->last_error ) {
++			throw new \RuntimeException( 'The large export job table could not be read.' );
++		}
++	}
++
++	/**
++	 * Return the current WordPress site's job table name.
++	 *
++	 * @return string
++	 */
++	private function table(): string {
++		global $wpdb;
++		return $wpdb->prefix . 'wc_large_export_jobs';
++	}
++}
+diff --git a/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php b/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php
+new file mode 100644
+index 00000000..39667eb5
+--- /dev/null
++++ b/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php
+@@ -0,0 +1,115 @@
++<?php
++/**
++ * Admin view: durable, opt-in large product CSV export.
++ *
++ * @package WooCommerce\Admin\Export
++ */
++
++defined( 'ABSPATH' ) || exit;
++
++$is_ready = defined( 'WC_LARGE_PRODUCT_EXPORT' ) && true === WC_LARGE_PRODUCT_EXPORT
++	&& defined( 'WC_LARGE_EXPORT_DIR' ) && is_string( WC_LARGE_EXPORT_DIR );
++?>
++<div class="wrap woocommerce">
++	<h1><?php esc_html_e( 'Large Product Export', 'woocommerce' ); ?></h1>
++	<p><?php esc_html_e( 'Jobs are stored durably and processed by Action Scheduler or a scheduled worker. Closing this page does not cancel an export.', 'woocommerce' ); ?></p>
++
++	<?php if ( ! $is_ready ) : ?>
++		<div class="notice notice-warning"><p><?php esc_html_e( 'The background export is disabled. Enable WC_LARGE_PRODUCT_EXPORT and configure WC_LARGE_EXPORT_DIR outside the web root in wp-config.php. The standard WooCommerce exporter remains available.', 'woocommerce' ); ?></p></div>
++	<?php endif; ?>
++	<?php if ( $error ) : ?>
++		<div class="notice notice-error"><p><?php echo esc_html( $error ); ?></p></div>
++	<?php endif; ?>
++
++	<?php if ( count( $selected_ids ) > 2000 ) : ?>
++		<div class="notice notice-warning"><p><?php esc_html_e( 'The background exporter accepts at most 2,000 explicitly selected product IDs per job. Clear the selection or use filters.', 'woocommerce' ); ?></p></div>
++	<?php endif; ?>
++
++	<div id="wc-large-export-notice" class="notice inline" hidden><p></p></div>
++	<div class="postbox" style="max-width:900px;padding:16px 20px">
++		<form id="wc-large-export-form">
++			<?php if ( $selected_ids ) : ?>
++				<input type="hidden" name="product_ids" value="<?php echo esc_attr( implode( ',', $selected_ids ) ); ?>">
++			<?php endif; ?>
++			<table class="form-table" role="presentation">
++				<tr>
++					<th scope="row"><label for="wc-large-export-columns"><?php esc_html_e( 'Columns', 'woocommerce' ); ?></label></th>
++					<td>
++						<select id="wc-large-export-columns" name="columns[]" class="wc-enhanced-select" multiple style="width:100%" data-placeholder="<?php esc_attr_e( 'Export all available columns', 'woocommerce' ); ?>">
++							<?php foreach ( $exporter->get_default_column_names() as $column_id => $column_name ) : ?>
++								<option value="<?php echo esc_attr( $column_id ); ?>"><?php echo esc_html( $column_name ); ?></option>
++							<?php endforeach; ?>
++							<option value="downloads"><?php esc_html_e( 'Downloads', 'woocommerce' ); ?></option>
++							<option value="attributes"><?php esc_html_e( 'Attributes', 'woocommerce' ); ?></option>
++						</select>
++						<p class="description"><?php esc_html_e( 'Leave empty to export all columns, including registered custom columns.', 'woocommerce' ); ?></p>
++					</td>
++				</tr>
++				<?php if ( ! $selected_ids ) : ?>
++					<tr>
++						<th scope="row"><label for="wc-large-export-types"><?php esc_html_e( 'Product types', 'woocommerce' ); ?></label></th>
++						<td>
++							<select id="wc-large-export-types" name="types[]" class="wc-enhanced-select" multiple style="width:100%" data-placeholder="<?php esc_attr_e( 'Export all product types', 'woocommerce' ); ?>">
++								<?php foreach ( $product_types as $type => $label ) : ?>
++									<option value="<?php echo esc_attr( $type ); ?>"><?php echo esc_html( $label ); ?></option>
++								<?php endforeach; ?>
++							</select>
++						</td>
++					</tr>
++					<tr>
++						<th scope="row"><label for="wc-large-export-categories"><?php esc_html_e( 'Categories', 'woocommerce' ); ?></label></th>
++						<td>
++							<select id="wc-large-export-categories" name="categories[]" class="wc-enhanced-select" multiple style="width:100%" data-placeholder="<?php esc_attr_e( 'Export all categories', 'woocommerce' ); ?>">
++								<?php foreach ( $categories as $category ) : ?>
++									<option value="<?php echo esc_attr( $category->slug ); ?>"><?php echo esc_html( $category->name ); ?></option>
++								<?php endforeach; ?>
++							</select>
++						</td>
++					</tr>
++				<?php endif; ?>
++				<tr>
++					<th scope="row"><label for="wc-large-export-mode"><?php esc_html_e( 'Query mode', 'woocommerce' ); ?></label></th>
++					<td>
++						<select id="wc-large-export-mode" name="mode">
++							<option value="compatibility"><?php esc_html_e( 'Compatibility paging', 'woocommerce' ); ?></option>
++							<option value="keyset"><?php esc_html_e( 'Optimized ID cursor (opt-in; validate extension compatibility)', 'woocommerce' ); ?></option>
++						</select>
++					</td>
++				</tr>
++				<tr>
++					<th scope="row"><label for="wc-large-export-format"><?php esc_html_e( 'File format', 'woocommerce' ); ?></label></th>
++					<td><select id="wc-large-export-format" name="file_format">
++						<option value="csv"><?php esc_html_e( 'CSV', 'woocommerce' ); ?></option>
++						<?php if ( method_exists( HashContext::class, '__serialize' ) ) : ?>
++							<option value="zip"><?php esc_html_e( 'CSV in ZIP64 (uncompressed, resumable)', 'woocommerce' ); ?></option>
++						<?php endif; ?>
++					</select></td>
++				</tr>
++				<tr>
++					<th scope="row"><?php esc_html_e( 'CSV options', 'woocommerce' ); ?></th>
++					<td>
++						<label><input type="checkbox" name="meta" value="1"> <?php esc_html_e( 'Export custom metadata', 'woocommerce' ); ?></label><br>
++						<label><input type="checkbox" name="spreadsheet" value="1" checked> <?php esc_html_e( 'Protect spreadsheet formula cells', 'woocommerce' ); ?></label><br>
++						<label><input type="checkbox" name="bom" value="1" checked> <?php esc_html_e( 'Include UTF-8 BOM', 'woocommerce' ); ?></label>
++					</td>
++				</tr>
++			</table>
++			<p><button type="submit" class="button button-primary" <?php disabled( ! $is_ready || count( $selected_ids ) > 2000 ); ?>><?php esc_html_e( 'Start background export', 'woocommerce' ); ?></button></p>
++		</form>
++	</div>
++
++	<h2><?php esc_html_e( 'Your export jobs', 'woocommerce' ); ?></h2>
++	<p><?php esc_html_e( 'Progress and ETA are estimates until the worker has processed all selected records. A job is complete only after its CSV has been verified.', 'woocommerce' ); ?></p>
++	<table class="widefat striped" id="wc-large-export-jobs">
++		<thead><tr>
++			<th><?php esc_html_e( 'Job', 'woocommerce' ); ?></th>
++			<th><?php esc_html_e( 'Status', 'woocommerce' ); ?></th>
++			<th><?php esc_html_e( 'Progress', 'woocommerce' ); ?></th>
++			<th><?php esc_html_e( 'Throughput', 'woocommerce' ); ?></th>
++			<th><?php esc_html_e( 'Elapsed / ETA', 'woocommerce' ); ?></th>
++			<th><?php esc_html_e( 'Verified output / staging', 'woocommerce' ); ?></th>
++			<th><?php esc_html_e( 'Actions', 'woocommerce' ); ?></th>
++		</tr></thead>
++		<tbody><tr><td colspan="7"><?php esc_html_e( 'Loading saved jobs…', 'woocommerce' ); ?></td></tr></tbody>
++	</table>
++</div>
+diff --git a/wp-content/plugins/woocommerce/assets/js/admin/wc-large-product-export.js b/wp-content/plugins/woocommerce/assets/js/admin/wc-large-product-export.js
+new file mode 100644
+index 00000000..253c62eb
+--- /dev/null
++++ b/wp-content/plugins/woocommerce/assets/js/admin/wc-large-product-export.js
+@@ -0,0 +1,224 @@
++/* global jQuery, wc_large_product_export_params */
++/* eslint-disable camelcase */
++;( function ( $ ) {
++	'use strict';
++
++	var $form = $( '#wc-large-export-form' );
++	if ( ! $form.length ) {
++		return;
++	}
++
++	var $tbody = $( '#wc-large-export-jobs tbody' );
++	var $notice = $( '#wc-large-export-notice' );
++	var polling = false;
++	var timer = null;
++
++	function message( text, isError ) {
++		$notice.toggleClass( 'notice-error', !! isError ).toggleClass( 'notice-success', ! isError );
++		$notice.find( 'p' ).text( text || '' );
++		$notice.prop( 'hidden', ! text );
++	}
++
++	function request( action, data ) {
++		if ( 'string' === typeof data ) {
++			data += '&';
++			data += $.param( { action: action, security: wc_large_product_export_params.nonce } );
++		} else {
++			data = data || {};
++			data.action = action;
++			data.security = wc_large_product_export_params.nonce;
++		}
++		return $.ajax( {
++			url: wc_large_product_export_params.ajax_url,
++			type: 'POST',
++			data: data,
++			dataType: 'json',
++			timeout: 30000
++		} );
++	}
++
++	function button( label, action, job ) {
++		return $( '<button type="button" class="button button-small">' )
++			.text( label )
++			.attr( 'data-control', action )
++			.attr( 'data-job-id', job.id )
++			.attr( 'data-nonce', job.control_nonce );
++	}
++
++	function formatBytes( bytes ) {
++		bytes = Number( bytes ) || 0;
++		if ( bytes < 1024 ) {
++			return bytes + ' B';
++		}
++		var units = [ 'KB', 'MB', 'GB', 'TB' ];
++		var unit = -1;
++		do {
++			bytes /= 1024;
++			unit++;
++		} while ( bytes >= 1024 && unit < units.length - 1 );
++		return bytes.toFixed( 1 ) + ' ' + units[ unit ];
++	}
++
++	function formatSeconds( seconds ) {
++		seconds = Number( seconds );
++		if ( ! Number.isFinite( seconds ) || seconds < 0 ) {
++			return '—';
++		}
++		var hours = Math.floor( seconds / 3600 );
++		var minutes = Math.floor( ( seconds % 3600 ) / 60 );
++		var remainder = Math.floor( seconds % 60 );
++		return ( hours ? hours + 'h ' : '' ) + ( minutes ? minutes + 'm ' : '' ) + remainder + 's';
++	}
++
++	function renderActions( job ) {
++		var $actions = $( '<div class="wc-large-export-actions">' );
++		if ( job.status === 'pending' || job.status === 'queued' || job.status === 'running' ) {
++			$actions.append( button( 'Pause', 'pause', job ), ' ', button( 'Cancel', 'cancel', job ) );
++		} else if ( job.status === 'finalizing' || job.status === 'verifying' ) {
++			$actions.append( button( 'Pause', 'pause', job ), ' ', button( 'Cancel', 'cancel', job ) );
++		} else if ( job.status === 'pausing' ) {
++			$actions.append( button( 'Cancel', 'cancel', job ) );
++		} else if ( job.status === 'paused' ) {
++			$actions.append( button( 'Resume', 'resume', job ), ' ', button( 'Cancel', 'cancel', job ) );
++		} else if ( job.status === 'failed' ) {
++			$actions.append( button( 'Retry', 'retry', job ), ' ', button( 'Cancel', 'cancel', job ) );
++		} else if ( job.status === 'completed' && job.download_url ) {
++			$actions.append( $( '<a class="button button-primary button-small">' ).attr( 'href', job.download_url ).text( job.format === 'zip' ? 'Download ZIP' : 'Download CSV' ) );
++		}
++		if ( job.last_error ) {
++			$actions.append( $( '<p class="description">' ).text( job.last_error ) );
++		}
++		if ( job.logs && job.logs.length ) {
++			var $details = $( '<details>' ).append( $( '<summary>' ).text( 'View worker log (' + job.logs.length + ')' ) );
++			var $list = $( '<ol>' );
++			job.logs.forEach( function ( entry ) {
++				var label = new Date( Number( entry.at ) * 1000 ).toLocaleString() + ' · ' + ( entry.status || '' );
++				if ( entry.message ) {
++					label += ' · ' + entry.message;
++				}
++				$list.append( $( '<li>' ).text( label ) );
++			} );
++			$actions.append( $details.append( $list ) );
++		}
++		return $actions;
++	}
++
++	function render( jobs ) {
++		$tbody.empty();
++		if ( ! jobs.length ) {
++			$tbody.append( $( '<tr>' ).append( $( '<td colspan="7">' ).text( 'No export jobs yet.' ) ) );
++			return;
++		}
++		jobs.forEach( function ( job ) {
++			var $row = $( '<tr>' );
++			var progress = job.status === 'completed' ? '100% (verified)' : ( null === job.progress ? 'Total unknown' : job.progress + '% (estimate)' );
++			var $progress = $( '<div>' );
++			if ( null !== job.progress ) {
++				$progress.append( $( '<progress max="100">' ).val( job.progress ) );
++			}
++			$progress.append( $( '<span>' ).text( Number( job.rows ).toLocaleString() + ( job.estimate ? ' / ~' + Number( job.estimate ).toLocaleString() : '' ) + ' rows · ' + progress ) );
++			$row.append( $( '<td>' ).text( job.id ) );
++			$row.append( $( '<td>' ).text( job.status + ( job.mode ? ' · ' + job.mode : '' ) ).append( $( '<p class="description">' ).text( 'Current batch: ' + job.batch ) ) );
++			$row.append( $( '<td>' ).append( $progress ) );
++			$row.append( $( '<td>' ).text( job.rate ? Number( job.rate ).toLocaleString() + ' rows/s' : '—' ) );
++			$row.append( $( '<td>' ).text( formatSeconds( job.elapsed ) + ( null !== job.eta ? ' / ~' + formatSeconds( job.eta ) : '' ) ) );
++			$row.append( $( '<td>' ).text( job.status === 'completed' ? formatBytes( job.bytes ) : ( job.staging_bytes ? '~' + formatBytes( job.staging_bytes ) + ' temporary chunks' : 'Not finalized' ) ) );
++			$row.append( $( '<td>' ).append( renderActions( job ) ) );
++			$tbody.append( $row );
++		} );
++	}
++
++	function poll() {
++		if ( timer ) {
++			window.clearTimeout( timer );
++			timer = null;
++		}
++		if ( polling ) {
++			return;
++		}
++		polling = true;
++		request( 'woocommerce_large_export_status' )
++			.done( function ( response ) {
++				if ( response && response.success && response.data ) {
++					render( response.data );
++				}
++			} )
++			.fail( function () {
++				message( wc_large_product_export_params.messages.error, true );
++			} )
++			.always( function () {
++				polling = false;
++				timer = window.setTimeout( poll, wc_large_product_export_params.poll_interval );
++			} );
++	}
++
++	var pendingStart = null;
++	$form.on( 'submit', function ( event ) {
++		event.preventDefault();
++		var selection = $form.serialize();
++		// A timed-out Start may already have committed its job. Retain the token
++		// for a retry of the same selection until the server acknowledges it.
++		if ( ! pendingStart || pendingStart.selection !== selection ) {
++			pendingStart = {
++				selection: selection,
++				id: window.crypto && window.crypto.randomUUID
++					? window.crypto.randomUUID().replace( /-/g, '' )
++					: ( Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2 ) + Math.random().toString( 36 ).slice( 2 ) ).replace( /[^a-z0-9]/gi, '' )
++			};
++		}
++		var $submit = $form.find( '[type="submit"]' ).prop( 'disabled', true );
++		message( wc_large_product_export_params.messages.working, false );
++		request( 'woocommerce_large_export_create', selection + '&request_id=' + encodeURIComponent( pendingStart.id ) )
++			.done( function ( response ) {
++				if ( response && response.success ) {
++					pendingStart = null;
++					message( 'Export job queued. Processing continues without this page.', false );
++					poll();
++				} else {
++					message( response && response.data && response.data.message ? response.data.message : wc_large_product_export_params.messages.error, true );
++				}
++			} )
++			.fail( function ( xhr ) {
++				var response = xhr.responseJSON;
++				message( response && response.data && response.data.message ? response.data.message : wc_large_product_export_params.messages.error, true );
++			} )
++			.always( function () {
++				$submit.prop( 'disabled', false );
++			} );
++	} );
++
++	$tbody.on( 'click', '[data-control]', function () {
++		var $button = $( this ).prop( 'disabled', true );
++		$.ajax( {
++			url: wc_large_product_export_params.ajax_url,
++			type: 'POST',
++			dataType: 'json',
++			timeout: 30000,
++			data: {
++				action: 'woocommerce_large_export_control',
++				job_id: $button.attr( 'data-job-id' ),
++				security: $button.attr( 'data-nonce' ),
++				control: $button.attr( 'data-control' )
++			}
++		} ).done( function ( response ) {
++			if ( response && response.success ) {
++				poll();
++			} else {
++				message( response && response.data && response.data.message ? response.data.message : wc_large_product_export_params.messages.error, true );
++			}
++		} ).fail( function ( xhr ) {
++			var response = xhr.responseJSON;
++			message( response && response.data && response.data.message ? response.data.message : wc_large_product_export_params.messages.error, true );
++		} ).always( function () {
++			$button.prop( 'disabled', false );
++		} );
++	} );
++
++	$( window ).on( 'beforeunload', function () {
++		if ( timer ) {
++			window.clearTimeout( timer );
++		}
++	} );
++
++	poll();
++}( jQuery ) );

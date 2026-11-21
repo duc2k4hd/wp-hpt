@@ -1,0 +1,1 @@
+{"test":"export-retention","passed":true,"retry_fenced_before_delete":true,"files":257,"bounded_purge_resumed":true,"purged_rows_leave_queue":true}

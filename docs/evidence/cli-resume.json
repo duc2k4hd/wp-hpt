@@ -1,0 +1,40 @@
+{
+    "id": "7605ce81-efc7-49cb-872f-c59c52382c7e",
+    "status": "queued",
+    "mode": "keyset",
+    "format": "csv",
+    "rows": 0,
+    "estimate": null,
+    "progress": null,
+    "rate": 0,
+    "eta": null,
+    "elapsed": 0,
+    "batch": 500,
+    "bytes": 0,
+    "staging_bytes": 0,
+    "database_queries": 0,
+    "database_seconds": 0,
+    "writer_seconds": 0,
+    "peak_memory_bytes": 0,
+    "work_units": 0,
+    "avg_unit_seconds": null,
+    "p95_recent_128_unit_seconds": null,
+    "max_unit_seconds": 0,
+    "checksum": null,
+    "attempts": 0,
+    "last_error": "",
+    "logs": [
+        {
+            "at": 1795243874,
+            "status": "queued"
+        },
+        {
+            "at": 1795243906,
+            "status": "paused"
+        },
+        {
+            "at": 1795243909,
+            "status": "queued"
+        }
+    ]
+}

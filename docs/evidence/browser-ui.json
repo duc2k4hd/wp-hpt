@@ -1,0 +1,17 @@
+{
+  "test": "browser-admin-ui",
+  "passed": true,
+  "transport": "in-app Chromium browser with an authenticated disposable WordPress session",
+  "default_mode": "compatibility",
+  "file_formats": ["csv", "zip"],
+  "saved_job_rows_rendered": 20,
+  "real_ajax_progress_rendered": true,
+  "pause_cancel_controls_rendered": true,
+  "completed_download_link_rendered": true,
+  "start_enabled": true,
+  "javascript_console_errors_after_fixture_setup": 0,
+  "mutating_controls_clicked": false,
+  "screenshot_captured": false,
+  "temporary_session_revoked": true,
+  "notes": "Fixed only the disposable fixture's original localhost URL/server-header overrides and disabled unrelated fixture AS async setup tasks. Restarted the expired detached loopback server as a managed background process. No export-engine permission or security setting was weakened. Screenshot was unavailable because the desktop window was not visible."
+}
