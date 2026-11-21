@@ -94,6 +94,11 @@ final class Files {
 		return $stream;
 	}
 
+	/** Limit PHP transfer workers separately from the export writer. */
+	public function download_lock() {
+		return \WC_Product_Export_Resources::download_lock( $this->site_dir() );
+	}
+
 	/**
 	 * Check space before writing to the private volume.
 	 *

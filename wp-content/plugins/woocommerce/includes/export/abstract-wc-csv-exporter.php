@@ -196,8 +196,8 @@ abstract class WC_CSV_Exporter {
 		@ini_set( 'zlib.output_compression', 'Off' ); // @codingStandardsIgnoreLine
 		@ini_set( 'output_buffering', 'Off' ); // @codingStandardsIgnoreLine
 		@ini_set( 'output_handler', '' ); // @codingStandardsIgnoreLine
-		ignore_user_abort( true );
-		wc_set_time_limit( 0 );
+		// Do not keep a download worker alive indefinitely after disconnects.
+		ignore_user_abort( false );
 		wc_nocache_headers();
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename=' . $this->get_filename() );
@@ -318,7 +318,7 @@ abstract class WC_CSV_Exporter {
 
 		$this->fputcsv( $buffer, $export_row );
 
-		++ $this->exported_row_count;
+		++$this->exported_row_count;
 	}
 
 	/**
@@ -410,7 +410,7 @@ abstract class WC_CSV_Exporter {
 		if ( $use_mb ) {
 			$is_valid_utf_8 = mb_check_encoding( $data, 'UTF-8' );
 			if ( ! $is_valid_utf_8 ) {
-				$data = mb_convert_encoding( $data, 'UTF-8', 'ISO-8859-1' );
+				$data = mb_convert_encoding( $data, 'UTF-8', 'UTF-8' );
 			}
 		}
 
@@ -494,6 +494,6 @@ abstract class WC_CSV_Exporter {
 	 * @param array    $export_row Row to export.
 	 */
 	protected function fputcsv( $buffer, $export_row ) {
-		fputcsv( $buffer, $export_row, $this->get_delimiter(), '"', "\0" ); // @codingStandardsIgnoreLine
+		fputcsv( $buffer, $export_row, $this->get_delimiter(), '"', '' ); // @codingStandardsIgnoreLine
 	}
 }

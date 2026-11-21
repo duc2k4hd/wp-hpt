@@ -1,0 +1,1 @@
+{"test":"oom-benchmark","passed":true,"rows":10000,"duplicates":0,"missing":0,"wall_seconds":18.416,"rows_per_second":543,"peak_php_bytes":113246208,"initial_batch":50,"maximum_batch":100,"sha256":"2c1ecee6b0a3cd7ec57d7b6a9bc0140c61e9eb53e8f2a66d3aaa5afcbd7d37ab"}

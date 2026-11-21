@@ -163,9 +163,21 @@ final class Store {
 		$this->install();
 		$table = $this->table();
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Site-local table identifier.
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $table WHERE user_id = %d ORDER BY created_at DESC, id DESC LIMIT 20", $user ), ARRAY_A );
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM $table WHERE user_id = %d ORDER BY created_at DESC, id DESC LIMIT 20", $user ) );
 		$this->check_read();
-		return array_map( array( $this, 'decode' ), $rows );
+		$rows = array();
+		foreach ( $ids as $id ) {
+			$job = $this->get( $id );
+			if ( ! $job || $user !== $job['user_id'] ) {
+				continue;
+			}
+			// Schemas can contain thousands of labels. Decode one job at a time
+			// and release its column dictionaries before retaining the next job.
+			// Workers/control still use get() and retain the full checkpoint.
+			unset( $job['checkpoint']['columns'], $job['checkpoint']['raw_columns'] );
+			$rows[] = $job;
+		}
+		return $rows;
 	}
 
 	/**

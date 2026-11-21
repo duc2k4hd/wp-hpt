@@ -1,5 +1,7 @@
 # Benchmark Large Export Engine
 
+Source sau hardening OOM: 10.000 dòng / 18,416 s / 543 rows/s / peak 108 MiB, initial batch 50/max 100, checksum khớp legacy. Xem `evidence/oom-benchmark.jsonl`. Số liệu million bên dưới thuộc source trước guard mới, chưa chạy lại toàn pipeline million sau hardening.
+
 ## Phương pháp
 
 Staging local: WordPress 6.8.2, WooCommerce 10.3.5, PHP CLI 8.4.4 x64 với `memory_limit=256M`, MariaDB 11.5.2; prefix `wcstage_`, database `wc_export_stage`, loopback Windows. Source website production không được kết nối để benchmark. Fixture 1.000.000 entities có simple/variable/variation/grouped/external, trạng thái publish/private/draft, tên Việt/Trung/Hàn/Nhật, SKU leading-zero, mô tả HTML có newline và mẫu mô tả lớn mỗi 1.000 record, metadata thưa. Không tuyên bố đây là workload full-image/full-meta mọi dòng.

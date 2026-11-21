@@ -1,5 +1,7 @@
 # Thay đổi Large Export Engine
 
+Lượt sửa OOM sau commit `6cd003b2`: chi tiết trong `EXPORT_ENGINE_OOM_FIX.md`. Có thêm sửa exporter/admin legacy, lớp `WC_Product_Export_Resources`, giới hạn download và đồng bộ đầy đủ `core-patch/payload/`. Các mô tả "không sửa legacy" bên dưới chỉ áp dụng lượt trước.
+
 Base: Git `c8e7a752` (đầy đủ commit hash trong evidence/version report), WordPress 6.8.2, WooCommerce 10.3.5, PHP tối thiểu 7.4. Công việc tiếp tục từ các file chưa commit trên nhánh `wc-export-engine-complete-20261121`; đã sao lưu trước sửa và tạo nhánh `wc-export-engine-hardening-20261121`. Không revert/commit đè thay đổi trước đó.
 
 ## Core file đã sửa

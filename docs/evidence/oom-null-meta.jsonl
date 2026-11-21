@@ -1,0 +1,1 @@
+{"test":"null-metadata-overhead","passed":true,"null_rows":100001,"rejected_before_cache_hydration":true,"peak_php_bytes":75497472}

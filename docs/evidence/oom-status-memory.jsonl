@@ -1,0 +1,1 @@
+{"test":"status-memory","passed":true,"jobs":20,"schema_columns_per_job":4000,"checkpoint_bytes_per_job":2173834,"worker_schema_preserved":true,"memory_limit":"128M","peak_php_bytes":96468992}

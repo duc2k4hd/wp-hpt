@@ -70,6 +70,7 @@
 			timeout: 90000,
 			data: {
 				form               : data,
+				excel_view         : $( '#woocommerce-exporter-excel-view:checked' ).length ? 1 : 0,
 				action             : 'woocommerce_do_ajax_product_export',
 				step               : step,
 				columns            : columns,

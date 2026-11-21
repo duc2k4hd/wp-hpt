@@ -1,5 +1,7 @@
 # Audit của trình xuất CSV sản phẩm
 
+Cập nhật bằng chứng hosting sau audit local: `EXPORT_ENGINE_OOM_FIX.md` phân tích 368 fatal hết 1 GiB RAM, 140 lỗi kết nối MySQL mất đồng bộ và lỗi lưu cron do người dùng cung cấp; đường download trên ảnh là legacy. Các nhận xét thiếu log bên dưới mô tả thời điểm audit trước khi nhận attachment đó. Chưa có access/request ID để gắn từng fatal với response 503 cụ thể.
+
 Bản gốc để đối chiếu là Git `c8e7a752`, WordPress 6.8.2 và WooCommerce 10.3.5. WooCommerce yêu cầu PHP 7.4 trở lên. Máy phát triển chạy PHP CLI 8.4.4 x64. Bản sao source đã lưu trong thư mục tạm của máy trước khi sửa. Phiên bản cơ sở dữ liệu staging và baseline đo được được ghi trong báo cáo benchmark.
 
 ```mermaid

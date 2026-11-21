@@ -34,6 +34,7 @@ final class Reader extends \WC_Product_CSV_Exporter {
 		}
 		parent::__construct();
 		$this->spreadsheet = $config['spreadsheet'];
+		$this->set_excel_view( ! empty( $config['excel_view'] ) );
 		$this->set_product_types_to_export( $config['types'] );
 		$this->set_columns_to_export( $config['columns'] );
 		$this->set_product_category_to_export( $config['categories'] ?? array() );
@@ -253,14 +254,17 @@ final class Reader extends \WC_Product_CSV_Exporter {
 		$simplify = null;
 		$split    = null;
 		if ( $bounded_cpt ) {
-			if ( $prime_meta ) {
+			if ( $bounded_cpt ) {
 				// Prime bounded metadata groups before WP/CRUD hydration. Native
 				// IN(1000+) meta cache queries can become whole-table scans on MariaDB.
 				$split = static function ( $value, $query ) use ( $marker ) {
 					return $marker === $query->get( 'wc_large_export_query' ) ? false : $value;
 				};
 			}
-			if ( $keyset && is_array( $args['type'] ) && in_array( 'variation', $args['type'], true ) &&
+			// Compatibility can remove the same proven tautology only when no SQL
+			// extension hook can depend on its shape. Otherwise retain native SQL.
+			$can_simplify = $keyset || self::native_hooks_only( array( 'pre_get_posts', 'parse_query', 'query', 'posts_search', 'posts_where', 'posts_where_paged', 'posts_join', 'posts_join_paged', 'posts_clauses', 'posts_distinct', 'posts_groupby', 'posts_orderby', 'posts_fields', 'post_limits', 'posts_request', 'posts_pre_query', 'posts_results', 'posts_clauses_request', 'posts_where_request', 'posts_join_request', 'posts_groupby_request', 'posts_orderby_request', 'posts_distinct_request', 'posts_fields_request', 'post_limits_request', 'posts_request_ids', 'split_the_query' ) );
+			if ( $can_simplify && is_array( $args['type'] ) && in_array( 'variation', $args['type'], true ) &&
 				self::native_hooks_only( array( 'get_terms', 'get_terms_args', 'get_terms_defaults', 'terms_clauses', 'pre_get_terms', 'terms_pre_query', 'get_terms_fields', 'get_terms_orderby', 'list_terms_exclusions' ) ) ) {
 				// WC's "selected type OR no type" condition is a tautology ONLY
 				// when the selection covers every actual product_type term. Removing
@@ -311,6 +315,9 @@ final class Reader extends \WC_Product_CSV_Exporter {
 				if ( $marker === $query->get( 'wc_large_export_query' ) && $wpdb->last_error ) {
 					$error = true;
 				}
+				if ( ! $error && $posts && $marker === $query->get( 'wc_large_export_query' ) ) {
+					\WC_Product_Export_Resources::check_ids( wp_list_pluck( $posts, 'ID' ) );
+				}
 				if ( ! $error && $prime_meta && $posts && $marker === $query->get( 'wc_large_export_query' ) ) {
 					if ( count( $posts ) > $args['limit'] ) {
 						throw new RuntimeException( 'A product query override does not support bounded background export. Use the legacy exporter.' );
@@ -326,12 +333,22 @@ final class Reader extends \WC_Product_CSV_Exporter {
 				add_filter( 'split_the_query', $split, PHP_INT_MAX, 2 );
 			}
 		}
+		$preflight = static function ( $request, $query ) use ( $marker, $args ) {
+			return \WC_Product_Export_Resources::preflight( $request, $query, $marker, $args['limit'], 'wc_large_export_query' );
+		};
+		add_filter( 'posts_request', $preflight, PHP_INT_MAX, 2 );
+		$found = static function ( $sql, $query ) use ( $marker ) {
+			return \WC_Product_Export_Resources::found_rows_query( $sql, $query, $marker, 'wc_large_export_query' );
+		};
+		add_filter( 'found_posts_query', $found, PHP_INT_MAX, 2 );
 		try {
 			$products = wc_get_products( $args );
 			if ( $error || $wpdb->last_error ) {
 				throw new RuntimeException( 'The product database query failed.' );
 			}
 		} finally {
+			remove_filter( 'posts_request', $preflight, PHP_INT_MAX );
+			remove_filter( 'found_posts_query', $found, PHP_INT_MAX );
 			if ( $bounded_cpt ) {
 				remove_filter( 'posts_where', $where, PHP_INT_MAX );
 				remove_filter( 'posts_results', $results, PHP_INT_MIN );
@@ -442,6 +459,7 @@ final class Reader extends \WC_Product_CSV_Exporter {
 			$this->prime_export_batch_caches( $products );
 		}
 		foreach ( $products as $product ) {
+			\WC_Product_Export_Resources::check_memory();
 			$row = $this->generate_row_data( $product );
 			if ( ! is_array( $row ) ) {
 				throw new RuntimeException( 'A product export row hook did not return a row.' );

@@ -1,0 +1,1 @@
+{"test":"legacy-large-download","passed":true,"bytes":67108875,"memory_limit_bytes":100663296,"peak_php_bytes":75497472,"existing_unlimited_buffer_removed":true,"large_string_api_rejected":true,"byte_exact_sha256":"c5db2bb98da6f548b518e0d78f08d84135402c33568bc386bffeddcb6ea63201"}

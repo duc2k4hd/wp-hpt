@@ -102,7 +102,7 @@ class WC_Admin_Exporters {
 	 */
 	public function admin_scripts() {
 		$suffix  = Constants::is_true( 'SCRIPT_DEBUG' ) ? '' : '.min';
-		$version = Constants::get_constant( 'WC_VERSION' );
+		$version = Constants::get_constant( 'WC_VERSION' ) . '-hpt-export-2';
 		wp_register_script( 'wc-product-export', WC()->plugin_url() . '/assets/js/admin/wc-product-export' . $suffix . '.js', array( 'jquery' ), $version );
 		wp_localize_script(
 			'wc-product-export',
@@ -120,8 +120,13 @@ class WC_Admin_Exporters {
 	 * Export page UI.
 	 */
 	public function product_exporter() {
+		if ( defined( 'WC_LARGE_PRODUCT_EXPORT' ) && true === WC_LARGE_PRODUCT_EXPORT && class_exists( '\Automattic\WooCommerce\Internal\LargeExport\Integration' ) ) {
+			\Automattic\WooCommerce\Internal\LargeExport\Integration::render_page();
+			return;
+		}
+		echo '<div class="notice notice-warning"><p>' . esc_html__( 'Large exports require the background engine. Enable WC_LARGE_PRODUCT_EXPORT, configure private WC_LARGE_EXPORT_DIR storage and a worker before exporting large selections. Synchronous batches stop safely when their resource budget is exceeded.', 'woocommerce' ) . '</p></div>';
 		include_once WC_ABSPATH . 'includes/export/class-wc-product-csv-exporter.php';
-		include_once dirname( __FILE__ ) . '/views/html-admin-page-product-export.php';
+		include_once __DIR__ . '/views/html-admin-page-product-export.php';
 	}
 
 	/**
@@ -129,14 +134,31 @@ class WC_Admin_Exporters {
 	 */
 	public function download_export_file() {
 		if ( isset( $_GET['action'], $_GET['nonce'] ) && wp_verify_nonce( wp_unslash( $_GET['nonce'] ), 'product-csv' ) && 'download_product_csv' === wp_unslash( $_GET['action'] ) ) { // WPCS: input var ok, sanitization ok.
+			if ( ! $this->export_allowed() ) {
+				wp_die( esc_html__( 'Insufficient privileges to export products.', 'woocommerce' ), '', array( 'response' => 403 ) );
+			}
 			include_once WC_ABSPATH . 'includes/export/class-wc-product-csv-exporter.php';
 			$exporter = new WC_Product_CSV_Exporter();
+			$uploads  = wp_upload_dir();
+			try {
+				$download_lock = WC_Product_Export_Resources::download_lock( $uploads['basedir'] );
+			} catch ( RuntimeException $error ) {
+				wp_die( esc_html__( 'The CSV download could not acquire its storage lock.', 'woocommerce' ), '', array( 'response' => 409 ) );
+			}
+			if ( ! $download_lock ) {
+				header( 'Retry-After: 10' );
+				wp_die( esc_html__( 'Another CSV download is running. Try again when it finishes.', 'woocommerce' ), '', array( 'response' => 429 ) );
+			}
 
 			if ( ! empty( $_GET['filename'] ) ) { // WPCS: input var ok.
 				$exporter->set_filename( wp_unslash( $_GET['filename'] ) ); // WPCS: input var ok, sanitization ok.
 			}
 
-			$exporter->export();
+			try {
+				$exporter->export();
+			} catch ( RuntimeException $error ) {
+				wp_die( esc_html__( 'The CSV could not be downloaded within safe resource limits. Use the background exporter or check storage availability.', 'woocommerce' ), '', array( 'response' => 409 ) );
+			}
 		}
 	}
 
@@ -149,6 +171,9 @@ class WC_Admin_Exporters {
 		if ( ! $this->export_allowed() ) {
 			wp_send_json_error( array( 'message' => __( 'Insufficient privileges to export products.', 'woocommerce' ) ) );
 		}
+		if ( defined( 'WC_LARGE_PRODUCT_EXPORT' ) && true === WC_LARGE_PRODUCT_EXPORT ) {
+			wp_send_json_error( array( 'message' => __( 'Background export is enabled. Reload the Export page to create a saved background job.', 'woocommerce' ) ), 409 );
+		}
 
 		include_once WC_ABSPATH . 'includes/export/class-wc-product-csv-exporter.php';
 
@@ -156,6 +181,7 @@ class WC_Admin_Exporters {
 		$exporter = new WC_Product_CSV_Exporter();
 		$cursor   = isset( $_POST['export_cursor'] ) ? absint( wp_unslash( $_POST['export_cursor'] ) ) : 0; // WPCS: input var ok, sanitization ok.
 		$exporter->set_export_cursor( $cursor );
+		$exporter->set_excel_view( ! empty( $_POST['excel_view'] ) ); // WPCS: input var ok.
 
 		if ( ! empty( $_POST['columns'] ) ) { // WPCS: input var ok.
 			$exporter->set_column_names( wp_unslash( $_POST['columns'] ) ); // WPCS: input var ok, sanitization ok.
@@ -191,7 +217,35 @@ class WC_Admin_Exporters {
 		}
 
 		$exporter->set_page( $step );
-		$exporter->generate_file();
+		$uploads   = wp_upload_dir();
+		$lock_path = trailingslashit( $uploads['basedir'] ) . '.wc-product-export.lock';
+		$lock      = ! is_link( $lock_path ) ? @fopen( $lock_path, 'c+b' ) : false;
+		if ( ! $lock || ! flock( $lock, LOCK_EX | LOCK_NB ) ) {
+			if ( is_resource( $lock ) ) {
+				fclose( $lock );
+			}
+			wp_send_json_error( array( 'message' => __( 'Another product export batch is running. Wait for it to finish before trying again.', 'woocommerce' ) ), 429 );
+		}
+		try {
+			$exporter->generate_file();
+		} catch ( RuntimeException $error ) {
+			$export_error = in_array(
+				$error->getMessage(),
+				array(
+					'Product export stopped before exceeding its memory budget. Use a smaller background export batch.',
+					'Product export related-data batch exceeds its safe limit.',
+					'The product query cannot be preflighted within safe resource limits. Review query filters before exporting.',
+					'This selection has too many variations for synchronous export. Enable Large Product Export and use the background exporter.',
+					'This selection exceeds 10000 primary records. Enable Large Product Export and use the background exporter.',
+				),
+				true
+			) ? $error->getMessage() : __( 'The export batch could not complete safely. Check storage and database availability, then use the background exporter.', 'woocommerce' );
+		} finally {
+			fclose( $lock );
+		}
+		if ( isset( $export_error ) ) {
+			wp_send_json_error( array( 'message' => $export_error ), 400 );
+		}
 
 		$query_args = apply_filters(
 			'woocommerce_export_get_ajax_query_args',

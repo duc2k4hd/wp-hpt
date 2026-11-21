@@ -93,6 +93,9 @@ final class Command {
 	 * [--bom]
 	 * : Add a UTF-8 BOM to the CSV output.
 	 *
+	 * [--excel-view]
+	 * : Remove HTML and line breaks; shorten cells to 120 characters. Lossy; forces BOM and formula protection.
+	 *
 	 * [--no-bom]
 	 * : Omit the UTF-8 BOM.
 	 *
@@ -130,6 +133,7 @@ final class Command {
 					'statuses'    => $this->csv_list( $assoc_args['statuses'] ?? '' ),
 					'spreadsheet' => \WP_CLI\Utils\get_flag_value( $assoc_args, 'spreadsheet', true ),
 					'bom'         => \WP_CLI\Utils\get_flag_value( $assoc_args, 'bom', true ),
+					'excel_view'  => isset( $assoc_args['excel-view'] ),
 				)
 			);
 		} catch ( InvalidArgumentException $error ) {

@@ -17,6 +17,8 @@ if ( ! class_exists( 'WC_CSV_Exporter', false ) ) {
 	require_once WC_ABSPATH . 'includes/export/abstract-wc-csv-exporter.php';
 }
 
+require_once __DIR__ . '/class-wc-product-export-resources.php';
+
 /**
  * WC_CSV_Exporter Class.
  */
@@ -66,6 +68,7 @@ abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
 		$file = chr( 239 ) . chr( 187 ) . chr( 191 ) . $this->export_column_headers();
 
 		if ( @file_exists( $this->get_headers_row_file_path() ) ) { // phpcs:ignore Generic.PHP.NoSilencedErrors.Discouraged
+			WC_Product_Export_Resources::check_memory( (int) filesize( $this->get_headers_row_file_path() ) * 3 );
 			$file = @file_get_contents( $this->get_headers_row_file_path() ); // phpcs:ignore Generic.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPress.WP.AlternativeFunctions.file_system_read_file_get_contents
 		}
 
@@ -81,6 +84,8 @@ abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
 	public function get_file() {
 		$file = '';
 		if ( @file_exists( $this->get_file_path() ) ) { // phpcs:ignore Generic.PHP.NoSilencedErrors.Discouraged
+			// The string API remains available for small/custom exporters only.
+			WC_Product_Export_Resources::check_memory( (int) filesize( $this->get_file_path() ) * 3 );
 			$file = @file_get_contents( $this->get_file_path() ); // phpcs:ignore Generic.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPress.WP.AlternativeFunctions.file_system_read_file_get_contents
 		} else {
 			@file_put_contents( $this->get_file_path(), '' ); // phpcs:ignore WordPress.VIP.FileSystemWritesDisallow.file_ops_file_put_contents, Generic.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_read_file_put_contents
@@ -95,21 +100,41 @@ abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
 	 * @since 3.1.0
 	 */
 	public function export() {
+		// ini_set(output_buffering) does not remove an already active buffer.
+		// A stream into such a buffer would still accumulate the whole CSV in RAM.
+		while ( ob_get_level() > 0 ) {
+			$status = ob_get_status();
+			if ( ! ( $status['flags'] & PHP_OUTPUT_HANDLER_REMOVABLE ) || ! ob_end_clean() ) {
+				wp_die( esc_html__( 'The server output buffer cannot be disabled. The CSV has been retained.', 'woocommerce' ), '', array( 'response' => 409 ) );
+			}
+		}
+		WC_Product_Export_Resources::io(
+			static function () {
+				return ini_set( 'zlib.output_compression', '0' );
+			}
+		);
+		if ( ! in_array( strtolower( (string) ini_get( 'zlib.output_compression' ) ), array( '', '0', 'off' ), true ) ) {
+			wp_die( esc_html__( 'The server compression buffer cannot be disabled. The CSV has been retained.', 'woocommerce' ), '', array( 'response' => 409 ) );
+		}
+		if ( ! is_file( $this->get_file_path() ) || is_link( $this->get_file_path() ) ) {
+			wp_die( esc_html__( 'The generated CSV is unavailable. Start a new export.', 'woocommerce' ), '', array( 'response' => 404 ) );
+		}
 		$legacy_output_is_overridden = 'WC_CSV_Exporter' !== ( new ReflectionMethod( $this, 'send_content' ) )->getDeclaringClass()->getName()
 			|| __CLASS__ !== ( new ReflectionMethod( $this, 'get_file' ) )->getDeclaringClass()->getName()
 			|| __CLASS__ !== ( new ReflectionMethod( $this, 'get_headers_row_file' ) )->getDeclaringClass()->getName();
+		if ( ! $legacy_output_is_overridden && ( ! is_file( $this->get_headers_row_file_path() ) || is_link( $this->get_headers_row_file_path() ) ) ) {
+			wp_die( esc_html__( 'The CSV has not finished exporting. Wait for the export to complete before downloading.', 'woocommerce' ), '', array( 'response' => 409 ) );
+		}
 
 		$this->send_headers();
+		if ( 'HEAD' === ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) {
+			exit;
+		}
 
 		if ( $legacy_output_is_overridden ) {
 			// Preserve custom exporters that override the public string-based output API.
 			$this->send_content( $this->get_headers_row_file() . $this->get_file() );
 		} else {
-			// Keep the existing behavior of creating an empty file if no export exists.
-			if ( ! file_exists( $this->get_file_path() ) ) {
-				$this->get_file();
-			}
-
 			$output = fopen( 'php://output', 'wb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
 
 			if ( false !== $output ) {
@@ -122,9 +147,9 @@ abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
 					fclose( $headers );
 					$headers_copied = false !== $header_copied && $header_size === $header_copied;
 				} else {
-					$header          = chr( 239 ) . chr( 187 ) . chr( 191 ) . $this->export_column_headers();
-					$header_copied   = fwrite( $output, $header );
-					$headers_copied  = false !== $header_copied && strlen( $header ) === $header_copied;
+					$header         = chr( 239 ) . chr( 187 ) . chr( 191 ) . $this->export_column_headers();
+					$header_copied  = fwrite( $output, $header );
+					$headers_copied = false !== $header_copied && strlen( $header ) === $header_copied;
 				}
 
 				$body = fopen( $this->get_file_path(), 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
@@ -170,7 +195,12 @@ abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
 	 */
 	public function generate_file() {
 		if ( 1 === $this->get_page() ) {
-			@unlink( $this->get_file_path() ); // phpcs:ignore WordPress.VIP.FileSystemWritesDisallow.file_ops_unlink, Generic.PHP.NoSilencedErrors.Discouraged,
+			if ( file_exists( $this->get_headers_row_file_path() ) && ! @unlink( $this->get_headers_row_file_path() ) ) {
+				throw new RuntimeException( 'The previous CSV header could not be replaced safely.' );
+			}
+			if ( file_exists( $this->get_file_path() ) && ! @unlink( $this->get_file_path() ) ) {
+				throw new RuntimeException( 'The previous CSV could not be replaced safely.' );
+			}
 
 			// We need to initialize the file here.
 			$this->get_file();
@@ -195,7 +225,7 @@ abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
 					esc_html( $this->get_file_path() )
 				)
 			);
-			return false;
+			throw new RuntimeException( 'The CSV is not writable.' );
 		}
 
 		/**
@@ -211,8 +241,45 @@ abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
 		$fopen_mode = apply_filters( 'woocommerce_csv_exporter_fopen_mode', 'a+' );
 		$fp         = fopen( $this->get_file_path(), $fopen_mode );
 
-		if ( $fp ) {
-			fwrite( $fp, $data );
+		if ( ! $fp ) {
+			throw new RuntimeException( 'The CSV could not be opened for writing.' );
+		}
+		try {
+			if ( ! flock( $fp, LOCK_EX | LOCK_NB ) ) {
+				throw new RuntimeException( 'The CSV is being written by another request.' );
+			}
+			$start  = fstat( $fp )['size'];
+			$length = strlen( $data );
+			for ( $offset = 0; $offset < $length; $offset += $written ) {
+				$written = WC_Product_Export_Resources::io(
+					static function () use ( $fp, $data, $offset ) {
+						return fwrite( $fp, substr( $data, $offset, 1048576 ) );
+					}
+				);
+				if ( false === $written || 0 === $written ) {
+					throw new RuntimeException( 'The CSV write could not complete. Check free disk space.' );
+				}
+			}
+			if ( ! WC_Product_Export_Resources::io(
+				static function () use ( $fp ) {
+					return fflush( $fp ); }
+			) ) {
+				throw new RuntimeException( 'The CSV write could not be flushed.' );
+			}
+		} catch ( Throwable $error ) {
+			if ( isset( $start ) ) {
+				try {
+					WC_Product_Export_Resources::io(
+						static function () use ( $fp, $start ) {
+							return ftruncate( $fp, $start );
+						}
+					);
+				} catch ( RuntimeException $rollback_error ) {
+					error_log( 'WooCommerce export could not roll back an incomplete CSV write. Start a new export.' );
+				}
+			}
+			throw $error;
+		} finally {
 			fclose( $fp );
 		}
 
@@ -221,9 +288,16 @@ abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
 			$header = chr( 239 ) . chr( 187 ) . chr( 191 ) . $this->export_column_headers();
 
 			// We need to use a temporary file to store headers, this will make our life so much easier.
-			@file_put_contents( $this->get_headers_row_file_path(), $header ); //phpcs:ignore WordPress.VIP.FileSystemWritesDisallow.file_ops_file_put_contents, Generic.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_read_file_put_contents
+			$header_path = $this->get_headers_row_file_path();
+			$written     = WC_Product_Export_Resources::io(
+				static function () use ( $header_path, $header ) {
+					return file_put_contents( $header_path, $header, LOCK_EX );
+				}
+			);
+			if ( strlen( $header ) !== $written ) {
+				throw new RuntimeException( 'The CSV header write could not complete.' );
+			}
 		}
-
 	}
 
 	/**

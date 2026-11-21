@@ -23,10 +23,52 @@ if ( ! class_exists( 'WC_CSV_Batch_Exporter', false ) ) {
 	include_once WC_ABSPATH . 'includes/export/abstract-wc-csv-batch-exporter.php';
 }
 
+require_once __DIR__ . '/class-wc-product-export-resources.php';
+
 /**
  * WC_Product_CSV_Exporter Class.
  */
 class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+	/** @var bool Explicitly lossy display export; full exports remain import compatible. */
+	protected $excel_view = false;
+
+	/** Select single-line, shortened text for viewing in Excel. */
+	public function set_excel_view( $enabled ) {
+		$this->excel_view = (bool) $enabled;
+	}
+
+	/** Format display cells before applying the existing formula protection. */
+	public function format_data( $data ) {
+		if ( $this->excel_view && is_string( $data ) ) {
+			$data = wp_check_invalid_utf8( $data, true );
+			$data = preg_replace( '/<\s*br\s*\/?\s*>|<\/(?:p|div|li|tr|h[1-6])\s*>/iu', ' ', $data );
+			$data = wp_strip_all_tags( $data );
+			$data = html_entity_decode( $data, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$data = trim( preg_replace( '/[\p{Z}\s\x00-\x1f\x7f]+/u', ' ', $data ) );
+			// Leave one character for formula escaping. Cut at a Unicode character boundary.
+			if ( mb_strlen( $data, 'UTF-8' ) > 119 ) {
+				$data = mb_substr( $data, 0, 118, 'UTF-8' ) . '…';
+			}
+		}
+		return parent::format_data( $data );
+	}
+
+	/** @var int|null Primary records processed, excluding expanded variations. */
+	protected $export_main_count = null;
+
+	/** Bound even a third-party batch-limit filter to a safe number of objects. */
+	public function get_limit() {
+		return max( 1, min( 100, (int) parent::get_limit() ) );
+	}
+
+	/** Expanded children must not make progress finish before all parents are read. */
+	public function get_percent_complete() {
+		if ( null === $this->export_main_count ) {
+			return parent::get_percent_complete();
+		}
+		$processed = ( $this->get_page() - 1 ) * $this->get_limit() + $this->export_main_count;
+		return $this->total_rows ? min( 100, (int) floor( 100 * $processed / $this->total_rows ) ) : 100;
+	}
 
 	/**
 	 * Type of export used in filter names.
@@ -229,7 +271,23 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 	 * @since 3.1.0
 	 */
 	public function prepare_data_to_export() {
-		$args = array(
+		$read_only = static function () {
+			return false;
+		};
+		add_filter( 'woocommerce_product_variation_update_title_on_read', $read_only, PHP_INT_MAX );
+		try {
+			$this->prepare_bounded_product_data();
+		} finally {
+			remove_filter( 'woocommerce_product_variation_update_title_on_read', $read_only, PHP_INT_MAX );
+		}
+	}
+
+	/** Build one bounded batch without persisting variation title repairs on read. */
+	protected function prepare_bounded_product_data() {
+		WC_Product_Export_Resources::check_memory();
+		$this->export_product_cache          = array();
+		$this->export_grouped_children_cache = array();
+		$args                                = array(
 			'status'   => array( ProductStatus::PRIVATE, ProductStatus::PUBLISH, ProductStatus::DRAFT, ProductStatus::FUTURE, ProductStatus::PENDING ),
 			'limit'    => $this->get_limit(),
 			'page'     => $this->get_page(),
@@ -258,16 +316,17 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 		 * @since 3.5.0
 		 * @param array $args Arguments to pass to wc_get_products().
 		 */
-		$args = apply_filters( "woocommerce_product_export_{$this->export_type}_query_args", $args );
+		$args          = apply_filters( "woocommerce_product_export_{$this->export_type}_query_args", $args );
+		$args['limit'] = $this->get_limit();
 
 		if ( ! empty( $args['include'] ) ) {
 			$args['include'] = array_map( 'absint', (array) $args['include'] );
 		}
 
-		$cursor = $this->next_export_cursor;
+		$cursor                   = $this->next_export_cursor;
 		$this->next_export_cursor = 0;
-		$total_cache_key = $this->get_export_total_cache_key( $args );
-		$cached_total    = false;
+		$total_cache_key          = $this->get_export_total_cache_key( $args );
+		$cached_total             = false;
 		if ( 1 < $this->get_page() ) {
 			$cached_total = get_transient( $total_cache_key );
 		}
@@ -281,7 +340,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 		$cursor_compatible = isset( $args['orderby'] )
 			&& array( 'ID' => 'ASC' ) === $args['orderby']
 			&& empty( $args['offset'] );
-		$use_cursor = $cursor_compatible && (
+		$use_cursor        = $cursor_compatible && (
 			1 === $this->get_page()
 			|| ( $can_reuse_total && 0 < $cursor )
 		);
@@ -291,7 +350,6 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 				$args['wc_product_export_after_id'] = $cursor;
 			}
 		}
-
 		$cursor_filter = null;
 		if ( $use_cursor && 0 < $cursor ) {
 			$cursor_filter = static function ( $where, $query ) use ( $cursor ) {
@@ -305,7 +363,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 		}
 
 		try {
-			$products = wc_get_products( $args );
+			$products = WC_Product_Export_Resources::query( $args );
 		} finally {
 			if ( $cursor_filter ) {
 				remove_filter( 'posts_where', $cursor_filter, 10 );
@@ -323,6 +381,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 				set_transient( $total_cache_key, $this->total_rows, max( HOUR_IN_SECONDS, $expiration ) );
 			}
 		}
+		if ( $this->total_rows > 10000 ) {
+			throw new RuntimeException( 'This selection exceeds 10000 primary records. Enable Large Product Export and use the background exporter.' );
+		}
 		if ( $use_cursor && empty( $product_rows ) ) {
 			// The first count is only a progress estimate. If rows disappear while
 			// exporting, finish at the actual cursor boundary instead of looping on
@@ -330,8 +391,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 			$this->total_rows = $this->get_total_exported();
 		}
 
-		$this->row_data    = array();
-		$variable_products = array();
+		$this->export_main_count = count( $product_rows );
+		$this->row_data          = array();
+		$variable_products       = array();
 		$this->prime_export_batch_caches( $product_rows );
 		if ( $use_cursor && $product_rows ) {
 			$last_product = end( $product_rows );
@@ -341,6 +403,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 		}
 
 		foreach ( $product_rows as $product ) {
+			WC_Product_Export_Resources::check_memory();
 			// Check if the product is variable and if either the include or category filter is active.
 			// This is to ensure that product variations are only included if they are being selectively exported or if they are part of a category.
 			if ( ( ! empty( $args['include'] ) || ! empty( $args['category'] ) ) &&
@@ -355,14 +418,25 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 		// If variable products were identified (either through include or category filters), fetch their variations.
 		if ( ! empty( $variable_products ) ) {
 			foreach ( $variable_products as $parent_id ) {
-				$products = wc_get_products(
+				// Small expansions can stay synchronous; large ones must use durable
+				// child cursors in the background engine rather than an unbounded read.
+				$remaining = max( 0, 500 - count( $this->row_data ) );
+				$products  = WC_Product_Export_Resources::query(
 					array(
-						'parent' => $parent_id,
-						'type'   => array( ProductType::VARIATION ),
-						'return' => 'objects',
-						'limit'  => -1,
+						'parent'  => $parent_id,
+						'type'    => array( ProductType::VARIATION ),
+						'return'  => 'objects',
+						'limit'   => $remaining + 1,
+						'exclude' => array_map(
+							static function ( $product ) {
+								return $product->get_id(); },
+							$product_rows
+						),
 					)
 				);
+				if ( count( $products ) > $remaining ) {
+					throw new RuntimeException( 'This selection has too many variations for synchronous export. Enable Large Product Export and use the background exporter.' );
+				}
 
 				if ( ! $products ) {
 					continue;
@@ -371,10 +445,16 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 				$this->prime_export_batch_caches( $products );
 
 				foreach ( $products as $product ) {
+					WC_Product_Export_Resources::check_memory();
 					$this->row_data[] = $this->generate_row_data( $product );
 				}
 			}
 		}
+		$bytes = 0;
+		foreach ( $this->row_data as $row ) {
+			$bytes += WC_Product_Export_Resources::check_row( $row );
+		}
+		WC_Product_Export_Resources::check_memory( $bytes * 4 );
 	}
 
 	/**
@@ -402,6 +482,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 	 * @param WC_Product[] $products Products in the current export batch.
 	 */
 	protected function prime_export_batch_caches( $products ) {
+		WC_Product_Export_Resources::check_memory();
 		$attachment_ids = array();
 		$related_ids    = array();
 		$user_ids       = array();
@@ -421,18 +502,23 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 				}
 			}
 
-			$attachment_ids[] = $product->get_image_id( 'edit' );
-			$attachment_ids   = array_merge( $attachment_ids, (array) $product->get_gallery_image_ids( 'edit' ) );
-			$related_ids      = array_merge(
+			if ( $this->is_column_exporting( 'images' ) ) {
+				$attachment_ids[] = $product->get_image_id( 'edit' );
+				$attachment_ids   = array_merge( $attachment_ids, (array) $product->get_gallery_image_ids( 'edit' ) );
+			}
+			$related_ids = array_merge(
 				$related_ids,
-				(array) $product->get_upsell_ids( 'edit' ),
-				(array) $product->get_cross_sell_ids( 'edit' ),
-				array( $product->get_parent_id( 'edit' ) )
+				$this->is_column_exporting( 'upsell_ids' ) ? (array) $product->get_upsell_ids( 'edit' ) : array(),
+				$this->is_column_exporting( 'cross_sell_ids' ) ? (array) $product->get_cross_sell_ids( 'edit' ) : array(),
+				$this->is_column_exporting( 'parent_id' ) ? array( $product->get_parent_id( 'edit' ) ) : array()
 			);
 
 			// HPT custom export columns resolve logo and TablePress relationship
 			// posts per product. Prime those references as one bounded batch query.
 			foreach ( array( 'logo', 'tablepress' ) as $related_meta_key ) {
+				if ( ! $this->is_column_exporting( $related_meta_key ) ) {
+					continue;
+				}
 				$related_meta_ids = $product->get_meta( $related_meta_key, true, 'edit' );
 				if ( is_array( $related_meta_ids ) ) {
 					array_walk_recursive(
@@ -448,10 +534,10 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 				}
 			}
 
-			if ( $product->is_type( ProductType::GROUPED ) ) {
+			if ( $this->is_column_exporting( 'grouped_products' ) && $product->is_type( ProductType::GROUPED ) ) {
 				$children = array_filter( array_map( 'absint', (array) $product->get_children( 'edit' ) ) );
 				$this->export_grouped_children_cache[ $product_id ] = $children;
-				$related_ids                                 = array_merge( $related_ids, $children );
+				$related_ids                                        = array_merge( $related_ids, $children );
 			}
 		}
 
@@ -460,11 +546,17 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 		$user_ids       = array_values( array_unique( array_filter( array_map( 'absint', $user_ids ) ) ) );
 
 		if ( $attachment_ids && function_exists( '_prime_post_caches' ) ) {
-			_prime_post_caches( $attachment_ids, false, true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			foreach ( array_chunk( $attachment_ids, 100 ) as $group ) {
+				WC_Product_Export_Resources::check_ids( $group );
+				_prime_post_caches( $group, false, true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			}
 		}
 
 		if ( $related_ids && function_exists( '_prime_post_caches' ) ) {
-			_prime_post_caches( $related_ids, true, true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			foreach ( array_chunk( $related_ids, 100 ) as $group ) {
+				WC_Product_Export_Resources::check_ids( $group );
+				_prime_post_caches( $group, true, true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			}
 		}
 
 		if ( $user_ids && function_exists( 'cache_users' ) ) {
@@ -485,6 +577,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 		}
 
 		if ( ! array_key_exists( $product_id, $this->export_product_cache ) ) {
+			WC_Product_Export_Resources::check_ids( array( $product_id ) );
 			$this->export_product_cache[ $product_id ] = wc_get_product( $product_id );
 		}
 
@@ -543,7 +636,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 		 * @param WC_Product              $product     The product object corresponding to the current row.
 		 * @param WC_Product_CSV_Exporter $exporter    The instance of the CSV exporter.
 		 */
-		return apply_filters( 'woocommerce_product_export_row_data', $row, $product, $this );
+		$row = apply_filters( 'woocommerce_product_export_row_data', $row, $product, $this );
+		WC_Product_Export_Resources::check_row( $row );
+		return $row;
 	}
 
 	/**
@@ -875,6 +970,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 	 * @return string
 	 */
 	protected function filter_description_field( $description ) {
+		if ( $this->excel_view ) {
+			return $description;
+		}
 		$description = str_replace( '\n', "\\\\n", $description );
 		$description = str_replace( "\n", '\n', $description );
 		return $description;

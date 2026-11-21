@@ -1,5 +1,7 @@
 # Kết quả kiểm thử Large Export Engine
 
+Hardening sau log hosting: kết quả mới nhất ở `EXPORT_ENGINE_OOM_FIX.md` và `evidence/oom-*`. Các kết quả `final-*` bên dưới là lịch sử của commit trước hardening, không thay cho benchmark/runtime source mới.
+
 Ngày chạy: 21/11/2026. Database và filesystem staging local độc lập; PHP worker giới hạn 256 MiB. Evidence nằm trong `docs/evidence/`; mỗi JSON chỉ được coi là pass nếu script thực sự hoàn tất và các assertion độc lập không ném lỗi.
 
 ## Review cuối

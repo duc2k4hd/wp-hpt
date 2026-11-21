@@ -6,7 +6,7 @@ Chỉ xem xét production sau khi có staging tương đương, backup code/data
 
 Base patch là WooCommerce 10.3.5 tại Git `c8e7a752`. Nhánh tiếp tục: `wc-export-engine-hardening-20261121`. Bản sao trước lượt sửa được lưu ngoài repository trong thư mục temp `opencode/wc-export-continuation-20261121-125745`; có thêm bản sao từ lượt làm trước. Các bản sao local này không thay thế backup production.
 
-Review/bàn giao cuối: nhánh `wc-export-engine-finalize-20261121`; snapshot runtime trước lượt review tại `%TEMP%/wc-export-review-20261121-154716`. Patch chứa toàn bộ 11 runtime files so với base, không chứa tests/evidence/configuration. Sau khi hoàn tất, patch phải qua cả apply check trên base và reverse check trên workspace hiện tại.
+Review/bàn giao cuối: nhánh `wc-export-engine-finalize-20261121`; snapshot runtime trước lượt review tại `%TEMP%/wc-export-review-20261121-154716`. Sau hardening OOM, full patch chứa 16 runtime files so với base (trước đó là 11), không chứa tests/evidence/configuration. Snapshot trước lượt OOM: `%TEMP%/wc-export-oom-before-20261121-163333`. Kiểm tra apply/reverse/content mới ở `evidence/oom-patch-validation.json`; `final-patch-validation.json` là bằng chứng của patch cũ. `core-patch/payload/` cũng đồng bộ đủ engine/bootstrap/read-only guard để rollback không xóa helper mà vẫn để engine tham chiếu nó.
 
 1. Review `git diff` và danh sách file trong `EXPORT_ENGINE_CHANGES.md`; kiểm tra patch không chứa credentials/config test hoặc dữ liệu sản phẩm.
 2. Kiểm tra `git apply --check docs/patches/woocommerce-10.3.5-large-export.patch` trên checkout đúng base, chưa có bản vá. Đừng áp dụng lần hai vào workspace đã có thay đổi.

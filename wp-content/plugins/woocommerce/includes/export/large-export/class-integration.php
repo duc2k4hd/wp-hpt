@@ -111,7 +111,7 @@ final class Integration {
 
 	/** Load the small admin controller only on the new export page. */
 	public static function enqueue_assets( string $hook_suffix ): void {
-		if ( 'product_page_' . self::ADMIN_PAGE !== $hook_suffix ) {
+		if ( ! in_array( $hook_suffix, array( 'product_page_' . self::ADMIN_PAGE, 'product_page_product_exporter' ), true ) ) {
 			return;
 		}
 
@@ -201,6 +201,7 @@ final class Integration {
 				'meta'        => ! empty( $_POST['meta'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
 				'spreadsheet' => ! empty( $_POST['spreadsheet'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
 				'bom'         => ! empty( $_POST['bom'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'excel_view'  => ! empty( $_POST['excel_view'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			);
 			if ( isset( $_POST['request_id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 				$request_id = sanitize_text_field( wp_unslash( $_POST['request_id'] ) );
@@ -336,10 +337,20 @@ final class Integration {
 			wp_die( esc_html__( 'The requested download range is not valid.', 'woocommerce' ), '', array( 'response' => 416 ) );
 		}
 
-		$start    = null === $range ? 0 : $range[0];
-		$length   = null === $range ? $size : $range[1] - $range[0] + 1;
-		$status   = null === $range ? 200 : 206;
-		$filename = 'products-' . $job['id'] . '.' . $extension;
+		$start        = null === $range ? 0 : $range[0];
+		$length       = null === $range ? $size : $range[1] - $range[0] + 1;
+		$status       = null === $range ? 200 : 206;
+		$filename     = 'products-' . $job['id'] . '.' . $extension;
+		$accel_prefix = defined( 'WC_LARGE_EXPORT_X_ACCEL_PREFIX' ) ? WC_LARGE_EXPORT_X_ACCEL_PREFIX : '';
+		$accel        = is_string( $accel_prefix ) && preg_match( '~\A/[A-Za-z0-9/_-]+\z~D', $accel_prefix ) && false === strpos( $accel_prefix, '..' );
+		$sendfile     = defined( 'WC_LARGE_EXPORT_X_SENDFILE' ) && true === WC_LARGE_EXPORT_X_SENDFILE;
+		if ( 'GET' === $method && ! $accel && ! $sendfile ) {
+			$download_lock = self::files()->download_lock();
+			if ( ! $download_lock ) {
+				header( 'Retry-After: 10' );
+				wp_die( esc_html__( 'Another export download is running. Try again when it finishes.', 'woocommerce' ), '', array( 'response' => 429 ) );
+			}
+		}
 		// WordPress/plugins may leave an output buffer active. A bounded filesystem
 		// stream is not bounded if that buffer accumulates the complete response.
 		while ( ob_get_level() > 0 ) {
@@ -371,12 +382,11 @@ final class Integration {
 			header( 'Content-Range: bytes ' . $start . '-' . ( $start + $length - 1 ) . '/' . $size );
 		}
 
-		$accel_prefix = defined( 'WC_LARGE_EXPORT_X_ACCEL_PREFIX' ) ? WC_LARGE_EXPORT_X_ACCEL_PREFIX : '';
-		if ( is_string( $accel_prefix ) && preg_match( '~\A/[A-Za-z0-9/_-]+\z~D', $accel_prefix ) && false === strpos( $accel_prefix, '..' ) ) {
+		if ( $accel ) {
 			header( 'X-Accel-Redirect: ' . rtrim( $accel_prefix, '/' ) . '/' . self::files()->relative_path( $job['id'], $extension ) );
 			exit;
 		}
-		if ( defined( 'WC_LARGE_EXPORT_X_SENDFILE' ) && true === WC_LARGE_EXPORT_X_SENDFILE ) {
+		if ( $sendfile ) {
 			header( 'X-Sendfile: ' . $path );
 			exit;
 		}

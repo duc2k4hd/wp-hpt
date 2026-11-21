@@ -1,0 +1,147 @@
+{
+  "base": "c8e7a752e287e4e30c146686181746da55e3e6a9",
+  "parent_commit": "6cd003b247921c3acc170950037e497462c89a46",
+  "apply_check": true,
+  "reverse_check": true,
+  "patch_sha256": "2b79fbe1e505217605ec4df949e779d98ec98c4fe91221a65c40531e4179008a",
+  "files": [
+    {
+      "path": "wp-content/plugins/woocommerce/assets/js/admin/wc-large-product-export.js",
+      "sha256": "76e449ca2102102a190ee35cf1583ea011a317825b1679893ab58c8680b2f18b",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/assets/js/admin/wc-product-export.js",
+      "sha256": "a2f56884de72858e38561f41c5e206bb3245a25084da3927f465092d6e348fa5",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/assets/js/admin/wc-product-export.min.js",
+      "sha256": "0756fe69673be5d01536bbb218e1dda08546dd5fc4ab64fe6a1157ee363b7fd8",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/admin/class-wc-admin-exporters.php",
+      "sha256": "18b0f7db988088fbdbc752306bb95ff73249fab061c8ed0ef6625ec459129d20",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php",
+      "sha256": "48473ba7ddb5a8b1e01f2318214ac2b480efefc07e37ea3a502a1b36736aa761",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-product-export.php",
+      "sha256": "6e54b47293fca350918042159578aaf200694388b452cd86c83a446479201fce",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/data-stores/class-wc-product-variation-data-store-cpt.php",
+      "sha256": "e7a1179b0993b5d6454e4f44bd8ce608f2ef494d3b569e259dcde6622f35c024",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/abstract-wc-csv-batch-exporter.php",
+      "sha256": "4ef6b532c13917dda742803dda33216c24835c3b79a2353dd6da59bd88f71434",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/abstract-wc-csv-exporter.php",
+      "sha256": "d5b845bbb60439a4e3266f95693147e566f0703d51d386dc4d7d8d4f171dc5b1",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php",
+      "sha256": "8c739b4262721d97096c416dfaff89bc67fe626611598e921d205bc933e428a2",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-bootstrap.php",
+      "sha256": "f312f014c0fae6196fbc209eb47d9ac1c25f57f6c1f9fd5b948cc852c549a80a",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-command.php",
+      "sha256": "f1be583b0aee2e9e2c4734ce932ddb9dd9cc4181a6137bced339abdb86f51934",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php",
+      "sha256": "6a900d135a01a2cece19e4b7f7bda15dffd3312e5f2472ceedd51bb9cd188db2",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-files.php",
+      "sha256": "9192a3352039e335cf947a78ed44a617d0c0218ab90bd87ba85a408ef8116c8b",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php",
+      "sha256": "aad57bc5732c866b8795618f97417eb67ee35db776fdb192b245723b8c9948e7",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php",
+      "sha256": "858583d4eff0647581dd1372df5c057b54cd887fef4df10f9d578d537d7bc360",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-store.php",
+      "sha256": "a0f2f74b8d81da72bcea5c9055d7d4974d30f6857e9262f1a84ac7e5316e2e2d",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/woocommerce.php",
+      "sha256": "415ea700eab711e3c26f617894d0cc56bf11ed4d87ce70e7dd8b8e2c63eb6e56",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/themes/flatsome-child/paths/product-import-export-tools.php",
+      "sha256": "239dc0e4ea940ec2734f7ebb81386d48cd803c1d64db56889daf1b02213fdfc6",
+      "applied_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/class-wc-product-export-resources.php",
+      "sha256": "77b333e6a29c7e429411343cd9db2f78e2a97a184f62c023ac4bce6cd7a185fc",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    }
+  ]
+}

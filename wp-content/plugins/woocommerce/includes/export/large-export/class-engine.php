@@ -59,9 +59,14 @@ final class Engine {
 			'meta'        => ! empty( $options['meta'] ),
 			'bom'         => ! isset( $options['bom'] ) || (bool) $options['bom'],
 			'spreadsheet' => ! isset( $options['spreadsheet'] ) || (bool) $options['spreadsheet'],
+			'excel_view'  => ! empty( $options['excel_view'] ),
 			'estimate'    => ! isset( $options['estimate'] ) || (bool) $options['estimate'],
 			'consistency' => 'live',
 		);
+		if ( $config['excel_view'] ) {
+			$config['bom']         = true;
+			$config['spreadsheet'] = true;
+		}
 		if ( ! in_array( $config['mode'], array( 'keyset', 'compatibility' ), true ) ) {
 			throw new InvalidArgumentException( 'Unknown export mode.' );
 		}
@@ -96,9 +101,9 @@ final class Engine {
 			$config['request_id'] = $options['request_id'];
 		}
 
-		$config['batch_min'] = max( 1, min( 1000, (int) apply_filters( 'woocommerce_large_export_batch_min', 100 ) ) );
-		$config['batch_max'] = max( $config['batch_min'], min( 2000, (int) apply_filters( 'woocommerce_large_export_batch_max', 2000 ) ) );
-		$config['batch']     = max( $config['batch_min'], min( $config['batch_max'], (int) apply_filters( 'woocommerce_large_export_batch_initial', 500 ) ) );
+		$config['batch_min'] = max( 1, min( 100, (int) apply_filters( 'woocommerce_large_export_batch_min', 25 ) ) );
+		$config['batch_max'] = max( $config['batch_min'], min( 100, (int) apply_filters( 'woocommerce_large_export_batch_max', 100 ) ) );
+		$config['batch']     = max( $config['batch_min'], min( $config['batch_max'], (int) apply_filters( 'woocommerce_large_export_batch_initial', 50 ) ) );
 		$reader              = new Reader( $config );
 		// Freeze the insertion boundary at job creation, including when the first
 		// worker is not scheduled until later. This is not a transactional snapshot.
@@ -176,9 +181,23 @@ final class Engine {
 				throw $error;
 			}
 			// Exception messages from third-party hooks may contain row data or credentials.
+			if ( $error instanceof RuntimeException && 'Product export stopped before exceeding its memory budget. Use a smaller background export batch.' === $error->getMessage() ) {
+				// Retry the same uncommitted keyset range with fewer objects. OFFSET
+				// jobs keep their page width and fail safely instead of skipping rows.
+				$current = $this->store->get( $id );
+				if ( $current && 'keyset' === ( $current['checkpoint']['mode'] ?? '' ) ) {
+					$checkpoint                       = $current['checkpoint'];
+					$checkpoint['batch']              = min( \WC_Product_Export_Resources::suggested_batch(), max( 1, (int) floor( min( 100, $checkpoint['batch'] ) / 2 ) ) );
+					$checkpoint['resource_batch_max'] = $checkpoint['batch'];
+					$this->store->save( $job, array( 'checkpoint' => $checkpoint ) );
+				}
+			}
 			$message = get_class( $error ) === RuntimeException::class && in_array( $error->getMessage(), self::public_errors(), true )
 				? $error->getMessage() : 'A worker unit failed. Check private storage and database availability, then review export compatibility.';
 			$this->store->failure( $job, $message );
+			if ( wp_cache_supports( 'flush_runtime' ) ) {
+				wp_cache_flush_runtime();
+			}
 		} finally {
 			try {
 				if ( $job ) {
@@ -197,6 +216,10 @@ final class Engine {
 
 	private static function public_errors(): array {
 		return array(
+			'Product export stopped before exceeding its memory budget. Use a smaller background export batch.',
+			'Product export related-data batch exceeds its safe limit.',
+			'The product export resource check could not read the database.',
+			'The product query cannot be preflighted within safe resource limits. Review query filters before exporting.',
 			'Large export requires the read-only variation data-store patch. Reapply the verified core patch.',
 			'Large export requires request-local object-cache flushing. Configure a compatible cache drop-in.',
 			'The export owner no longer has export privileges.',
@@ -367,9 +390,9 @@ final class Engine {
 			$memory_limit    = $memory_limit > 0 ? $memory_limit : 256 * 1024 * 1024;
 			$memory_pressure = memory_get_usage( true ) >= (int) ( $memory_limit * 0.70 );
 			if ( $elapsed > 2 || $query_time > 1 || $write_time > 1 || $memory_pressure ) {
-				$state['batch'] = max( $config['batch_min'], (int) ( $batch * 0.7 ) );
+				$state['batch'] = max( min( $config['batch_min'], $batch ), (int) ( $batch * 0.7 ) );
 			} elseif ( $elapsed < 0.6 && $written['rows'] >= $batch ) {
-				$state['batch'] = min( $config['batch_max'], max( $batch + 1, (int) ( $batch * 1.2 ) ) );
+				$state['batch'] = min( 100, $config['batch_max'], $state['resource_batch_max'] ?? $config['batch_max'], max( $batch + 1, (int) ( $batch * 1.2 ) ) );
 			}
 		}
 		$this->store->save( $job, array( 'checkpoint' => $state ) );

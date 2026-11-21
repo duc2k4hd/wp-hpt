@@ -1549,6 +1549,7 @@ function hpt_pie_load_wc_exporter() {
 function hpt_pie_make_exporter($config) {
     $exporter = new WC_Product_CSV_Exporter();
     $exporter->set_limit(hpt_pie_export_batch_size());
+    $exporter->set_excel_view(!empty($config['excel_view']));
 
     if (!empty($config['filename'])) {
         $exporter->set_filename($config['filename']);
@@ -1592,6 +1593,7 @@ function hpt_pie_ajax_export_init() {
         'filename'     => $filename,
         'category_ids' => array_values($category_ids),
         'gzip'         => $gzip ? 1 : 0,
+        'excel_view'   => !empty($_POST['excel_view']),
     );
 
     $job_id = hpt_pie_create_job(array(
@@ -2493,6 +2495,7 @@ function hpt_pie_render_page() {
                             </select><small>Không chọn = xuất toàn bộ sản phẩm. CSV luôn có ID, SKU, slug và URL.</small></label>
                     <fieldset class="hpt-pie-field"><legend>Định dạng tải</legend><label><input type="checkbox" name="gzip" value="1"> <strong>Nén .gz</strong><small>Khuyến nghị với file rất lớn.</small></label><div class="hpt-pie-columns"><span class="hpt-pie-chip">Slug</span><span class="hpt-pie-chip">URL sản phẩm</span><span class="hpt-pie-chip">Dữ liệu WooCommerce</span></div></fieldset>
                 </div>
+                <label class="hpt-pie-checkline"><input type="checkbox" name="excel_view" value="1" checked> Bản xem Excel: bỏ HTML, gộp xuống dòng, cắt tối đa 120 ký tự/ô. Bỏ chọn để xuất đầy đủ khi nhập lại. CSV không lưu độ rộng cột.</label>
                 <button class="button button-primary hpt-pie-primary" type="submit"><span class="dashicons dashicons-download"></span> Bắt đầu xuất</button>
             </form>
             <div id="hpt-pie-export-progress" class="hpt-pie-progress" style="display:none;"><strong class="hpt-pie-title">Đang xuất...</strong><div class="hpt-pie-track"><div class="hpt-pie-fill" style="width:0;"></div></div><div class="hpt-pie-meta"></div><p class="hpt-pie-actions"><button type="button" class="button hpt-pie-pause" data-type="export">Tạm dừng</button><button type="button" class="button hpt-pie-resume" data-type="export" style="display:none;">Tiếp tục</button><button type="button" class="button hpt-pie-cancel" data-type="export">Hủy</button><a class="button button-primary hpt-pie-download" style="display:none;" href="#"><span class="dashicons dashicons-download"></span> Tải file</a></p>

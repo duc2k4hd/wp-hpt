@@ -1,5 +1,7 @@
 # Bàn giao Large Product Export — 21/11/2026
 
+**Cập nhật sau log hosting:** xem `EXPORT_ENGINE_OOM_FIX.md` và evidence `oom-*` cho source mới nhất. Bản hardening bổ sung resource preflight, batch 50/25/100, bảo vệ legacy/download và routing từ trang Export cũ; thay thế các mô tả batch/file count và benchmark source cuối ở bản bàn giao dưới đây.
+
 ## 1. Root Cause
 
 Source legacy còn phụ thuộc chuỗi AJAX từ browser, OFFSET fallback, mở rộng toàn variations của từng parent, append không xác minh partial write và API có thể đọc cả file. Profiling staging chứng minh taxonomy materialization và metadata-prefetch IN quá lớn gây query chậm; variation getter còn UPDATE title. Không có log request 503 từ hosting nên chưa xác nhận nguyên nhân response 503 thực tế. Xem `EXPORT_ENGINE_AUDIT.md`.

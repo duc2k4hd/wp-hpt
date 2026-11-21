@@ -1,5 +1,7 @@
 # Vận hành Large Product Export
 
+Sau hardening OOM, job mới mặc định initial 50/min 25/max 100; budget nhỏ hơn giữa 256 MiB và 70% memory_limit. Standard Export page dùng background UI khi cờ bật. Native legacy tối đa 100 primary/500 expanded rows mỗi batch, tối đa 10.000 primary records mỗi selection và dừng nếu preflight vượt RAM; không tăng RAM để vượt chốt này. PHP download có một slot/storage directory, trả 429 khi bận; dùng server offload cho file lớn. Log hosting có lỗi không lưu được cron, nên phải kiểm chứng runner thật hoặc dùng WP-CLI + system scheduler. Xem `EXPORT_ENGINE_OOM_FIX.md` để cấu hình và đọc giới hạn mới.
+
 ## Chuẩn bị và bật trên staging
 
 1. Backup code + database; xác nhận đúng staging và chủ sở hữu cho phép triển khai. Đối chiếu version/base/patch; không upload nguyên bản sao local chứa cấu hình hay dữ liệu test lên production.

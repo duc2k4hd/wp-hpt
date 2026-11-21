@@ -136,6 +136,10 @@ if ( ! empty( $_GET['product_ids'] ) ) {
 							</td>
 						</tr>
 						<?php do_action( 'woocommerce_product_export_row' ); ?>
+						<tr>
+							<th scope="row"><label for="woocommerce-exporter-excel-view"><?php esc_html_e( 'Bản xem Excel', 'woocommerce' ); ?></label></th>
+							<td><label><input type="checkbox" id="woocommerce-exporter-excel-view" checked> <?php esc_html_e( 'Bỏ HTML, gộp xuống dòng, cắt mỗi ô tối đa 120 ký tự. Bỏ chọn để xuất đầy đủ khi nhập lại sản phẩm. CSV không lưu độ rộng cột.', 'woocommerce' ); ?></label></td>
+						</tr>
 					</tbody>
 				</table>
 				<progress class="woocommerce-exporter-progress" max="100" value="0"></progress>
