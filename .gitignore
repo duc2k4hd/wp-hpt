@@ -1,0 +1,14 @@
+@"
+
+# Database
+*.sql
+*.sql.gz
+
+# Logs
+error_log
+*.log
+
+"@ | Add-Content .gitignore
+
+git add .gitignore
+git commit -m "Ignore database and log files"
