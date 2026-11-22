@@ -36,7 +36,7 @@ Trong `wp-content/plugins/woocommerce/`:
 
 Thêm `includes/export/class-wc-product-export-resources.php`. Lượt bổ sung bản xem Excel sửa thêm template/JS của giao diện xuất WooCommerce và form xuất sản phẩm trong `wp-content/themes/flatsome-child/paths/product-import-export-tools.php`. Không sửa frontend, cart/checkout hoặc WordPress core.
 
-`core-patch/payload/` đồng bộ toàn bộ subsystem WooCommerce liên quan, gồm bootstrap/read-only data store/UI/helper để apply/rollback không để lại một phần engine tham chiếu class đã xóa. `reapply.py --check` kiểm tra đủ 21 payload files, không áp dụng trực tiếp thay đổi lên site khác. File theme triển khai riêng cùng plugin nếu dùng form HPT. Full runtime Git patch trong `docs/patches/woocommerce-10.3.5-large-export.patch` được dựng lại so với base `c8e7a752`; lượt sửa bắt đầu ở `6cd003b2`. Đây là mirror triển khai, không phải plugin/logic export thứ hai.
+`core-patch/payload/` đồng bộ toàn bộ subsystem WooCommerce liên quan, gồm bootstrap/read-only data store/UI/helper để apply/rollback không để lại một phần engine tham chiếu class đã xóa. `reapply.py --check` kiểm tra đủ 22 payload files, không áp dụng trực tiếp thay đổi lên site khác. File theme triển khai riêng cùng plugin nếu dùng form HPT. Full runtime Git patch trong `docs/patches/woocommerce-10.3.5-large-export.patch` được dựng lại so với base `c8e7a752`; lượt sửa bắt đầu ở `6cd003b2`. Đây là mirror triển khai, không phải plugin/logic export thứ hai.
 
 ## Kiểm chứng local
 
@@ -63,6 +63,8 @@ Fixture WordPress 6.8.2/WooCommerce 10.3.5, MariaDB 11.5.2 riêng trên loopback
 | Danh sách 20 jobs, mỗi checkpoint 2.173.834 byte/4.000 cột | Đọc từng job, bỏ schema khỏi danh sách; worker vẫn giữ schema đầy đủ. PHP limit 128 MiB, peak 92 MiB |
 
 ## Bản xem Excel và tiếng Việt
+
+Yêu cầu làm sạch mới thay thế hành vi giữ nguyên markup/xuống dòng bên dưới: mô tả dài/ngắn luôn được sửa bằng DOM, bỏ BR/class/thuộc tính ngoài A/IMG, bỏ wrapper dư và lồng định dạng trùng; mọi ô CSV được chuyển thành một dòng vật lý. A/IMG giữ các thuộc tính còn lại. Giới hạn 32.767 vẫn áp dụng nếu chọn Excel nhưng cắt text/entity và dự trù đủ thẻ đóng. Config `html_clean_version=1` yêu cầu job mới; file completed cũ vẫn tải được nhưng chưa có bước làm sạch này. PHP DOM được kiểm tra ngay khi tạo job. Evidence mới `html-clean.jsonl` kiểm tra mẫu 178 sản phẩm/15 cột, native và background cùng 178 dòng vật lý, không mất/trùng ID; không nhận đây là kiểm toán toàn bộ file trên hosting.
 
 Đã sửa lại theo yêu cầu giữ toàn bộ HTML: lựa chọn **Giới hạn ô Excel** được chọn sẵn cho lần xuất mới, giữ nguyên thẻ HTML, entities, khoảng trắng và xuống dòng trong ô. Chỉ cắt phần vượt dung lượng ô Excel: 32.767 đơn vị UTF-16, tính cả ký tự bảo vệ công thức nếu có. Không thêm dấu ba chấm, không cắt ở 120 ký tự, không cắt giữa cặp surrogate của emoji. CSV vẫn có UTF-8 BOM, dấu nháy kép chuẩn và bảo vệ công thức. Chế độ CLI dùng `--excel-view` với ý nghĩa mới này.
 

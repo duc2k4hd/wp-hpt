@@ -1,9 +1,9 @@
 {
   "base": "c8e7a752e287e4e30c146686181746da55e3e6a9",
-  "parent_commit": "3856351b76c3852b144dc0c8345f232c978ec30b",
+  "parent_commit": "ac22a89486c87a6d377b4e9441f2dfbc18970a74",
   "apply_check": true,
   "reverse_check": true,
-  "patch_sha256": "d4c6b6a047a7f0bf7815db9de6a5571d41a01fe7ef471d8cd771550f93148ca0",
+  "patch_sha256": "1dabac933aa49de0eca26085c8b845c0f1c768e057b218be2ba8f21799d14952",
   "files": [
     {
       "path": "wp-content/plugins/woocommerce/assets/js/admin/wc-large-product-export.js",
@@ -35,14 +35,14 @@
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php",
-      "sha256": "5ea94be905d2cb3ad674e1d8ed35ba1d2fcdc7c4b0a1bd878e515b6a86cc78ac",
+      "sha256": "5998e5da027f951c8f69fac390c1e9e2d0f81a803900813f1d6160348f2f19ad",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-product-export.php",
-      "sha256": "7f20a0e7a5b6e6fdd049f1042e3024f37d7574eaccb7a330bcf98dd0dc790cbb",
+      "sha256": "24d254cc7b3442f19713a9ff68a3659180fae5562815fc1e87ae2a316ad5d092",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
@@ -70,7 +70,7 @@
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php",
-      "sha256": "304ef980211b2452759e14fe2a01e1cf2a3204bbd7fab8501439bb80be172d01",
+      "sha256": "5ffc288cdec8280ec276dc23124adc5e29b88352a10a991bfdd1d8d342b89fb5",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
@@ -84,14 +84,14 @@
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-command.php",
-      "sha256": "7408c3bd4c63966e7878cf8f317ecff9110afb5d5224eda896d0474952251bed",
+      "sha256": "542170a85b01ac9f95066004e33e9e44186d42c1dcfbba3987118c3300ddc495",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php",
-      "sha256": "1126670929ffe8eb434558d445a762bc90ebb9155c5dc9626d9ae876f6702296",
+      "sha256": "302dc5466c22c3f307b5fd216e168a6668ebbbd2ee180021959f69a1da83a902",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
@@ -133,12 +133,19 @@
     },
     {
       "path": "wp-content/themes/flatsome-child/paths/product-import-export-tools.php",
-      "sha256": "148e5f6dfb06ff1cc6bdcf6ff4694b33a3f931052aadbff274e4ec27f880ac48",
+      "sha256": "ee444015f1e48cc0cd1cbc339d4b416b64bb3d5629d38f28c2f4750a91293ec1",
       "applied_matches_source": true
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/class-wc-product-export-resources.php",
       "sha256": "c22b31a47136942e4fefe57a7c506e348a97e21193cbdd688dcf53a9436e1a2f",
+      "applied_matches_source": true,
+      "payload_matches_source": true,
+      "staging_matches_source": true
+    },
+    {
+      "path": "wp-content/plugins/woocommerce/includes/export/class-wc-product-export-html.php",
+      "sha256": "facfbc360cd9ced415138aca81e5317eaf4441f26ddde7eaf33e24148b09936d",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true

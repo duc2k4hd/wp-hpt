@@ -24,6 +24,7 @@ if ( ! class_exists( 'WC_CSV_Batch_Exporter', false ) ) {
 }
 
 require_once __DIR__ . '/class-wc-product-export-resources.php';
+require_once __DIR__ . '/class-wc-product-export-html.php';
 
 /**
  * WC_Product_CSV_Exporter Class.
@@ -40,6 +41,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 	/** Preserve content and cap the final cell, including formula protection. */
 	public function format_data( $data ) {
 		$data = parent::format_data( $data );
+		if ( is_string( $data ) ) {
+			$data = WC_Product_Export_HTML::single_line( $data );
+		}
 		if ( ! $this->excel_view || ! is_string( $data ) ) {
 			return $data;
 		}
@@ -643,6 +647,16 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 		 */
 		$row = apply_filters( 'woocommerce_product_export_row_data', $row, $product, $this );
 		WC_Product_Export_Resources::check_row( $row );
+		foreach ( array( 'description', 'short_description' ) as $description_key ) {
+			if ( isset( $row[ $description_key ] ) && is_string( $row[ $description_key ] ) ) {
+				$raw_description = $row[ $description_key ];
+				$cleaned         = WC_Product_Export_HTML::clean( $raw_description, $this->excel_view ? 32767 : null );
+				if ( $this->excel_view && in_array( mb_substr( $cleaned, 0, 1, 'UTF-8' ), array( '=', '+', '-', '@' ), true ) ) {
+					$cleaned = WC_Product_Export_HTML::clean( $raw_description, 32766 );
+				}
+				$row[ $description_key ] = $cleaned;
+			}
+		}
 		return $row;
 	}
 
@@ -975,11 +989,6 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 	 * @return string
 	 */
 	protected function filter_description_field( $description ) {
-		if ( $this->excel_view ) {
-			return $description;
-		}
-		$description = str_replace( '\n', "\\\\n", $description );
-		$description = str_replace( "\n", '\n', $description );
 		return $description;
 	}
 	/**

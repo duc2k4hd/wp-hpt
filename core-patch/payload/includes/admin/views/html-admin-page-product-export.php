@@ -138,7 +138,7 @@ if ( ! empty( $_GET['product_ids'] ) ) {
 						<?php do_action( 'woocommerce_product_export_row' ); ?>
 						<tr>
 							<th scope="row"><label for="woocommerce-exporter-excel-view"><?php esc_html_e( 'Giới hạn ô Excel', 'woocommerce' ); ?></label></th>
-							<td><label><input type="checkbox" id="woocommerce-exporter-excel-view" checked> <?php esc_html_e( 'Giữ nguyên HTML và xuống dòng; chỉ cắt phần vượt 32.767 ký tự/ô. Bỏ chọn để xuất không giới hạn độ dài. CSV không lưu độ rộng cột.', 'woocommerce' ); ?></label></td>
+							<td><label><input type="checkbox" id="woocommerce-exporter-excel-view" checked> <?php esc_html_e( 'Giới hạn 32.767 ký tự/ô. Luôn làm sạch HTML, bỏ br/class, chỉ giữ thuộc tính a/img; mỗi sản phẩm một dòng CSV. Bỏ chọn để không giới hạn độ dài.', 'woocommerce' ); ?></label></td>
 						</tr>
 					</tbody>
 				</table>

@@ -94,7 +94,7 @@ final class Command {
 	 * : Add a UTF-8 BOM to the CSV output.
 	 *
 	 * [--excel-view]
-	 * : Preserve HTML and line breaks; cap cells at Excel's 32,767 UTF-16 units. Forces BOM and formula protection.
+	 * : Cap cells at 32,767 UTF-16 units with balanced HTML. Descriptions are always cleaned; CSV records are single-line.
 	 *
 	 * [--no-bom]
 	 * : Omit the UTF-8 BOM.

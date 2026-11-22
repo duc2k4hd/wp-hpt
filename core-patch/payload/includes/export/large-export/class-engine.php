@@ -61,6 +61,7 @@ final class Engine {
 			'spreadsheet'        => ! isset( $options['spreadsheet'] ) || (bool) $options['spreadsheet'],
 			'excel_view'         => ! empty( $options['excel_view'] ),
 			'excel_cell_version' => 2,
+			'html_clean_version' => 1,
 			'estimate'           => ! isset( $options['estimate'] ) || (bool) $options['estimate'],
 			'consistency'        => 'live',
 		);
@@ -106,6 +107,9 @@ final class Engine {
 		$config['batch_max'] = max( $config['batch_min'], min( 100, (int) apply_filters( 'woocommerce_large_export_batch_max', 100 ) ) );
 		$config['batch']     = max( $config['batch_min'], min( $config['batch_max'], (int) apply_filters( 'woocommerce_large_export_batch_initial', 50 ) ) );
 		$reader              = new Reader( $config );
+		if ( ! class_exists( 'DOMDocument' ) ) {
+			throw new InvalidArgumentException( 'Product HTML cleaning requires the PHP DOM extension.' );
+		}
 		// Freeze the insertion boundary at job creation, including when the first
 		// worker is not scheduled until later. This is not a transactional snapshot.
 		$config['source'] = $reader->source_boundary();
@@ -195,7 +199,7 @@ final class Engine {
 			}
 			$message = get_class( $error ) === RuntimeException::class && in_array( $error->getMessage(), self::public_errors(), true )
 				? $error->getMessage() : 'A worker unit failed. Check private storage and database availability, then review export compatibility.';
-			if ( 'This export used the old shortened Excel format. Start a new export to preserve full HTML.' === $message ) {
+			if ( in_array( $message, array( 'This export used the old shortened Excel format. Start a new export to preserve full HTML.', 'This export predates HTML cleaning. Start a new export to avoid mixing old and cleaned rows.' ), true ) ) {
 				$this->store->save(
 					$job,
 					array(
@@ -229,6 +233,10 @@ final class Engine {
 		return array(
 			'Product export stopped before exceeding its memory budget. Use a smaller background export batch.',
 			'This export used the old shortened Excel format. Start a new export to preserve full HTML.',
+			'This export predates HTML cleaning. Start a new export to avoid mixing old and cleaned rows.',
+			'Product HTML cleaning requires the PHP DOM extension.',
+			'The product description HTML could not be repaired safely.',
+			'The product description HTML is nested too deeply to export safely.',
 			'Product export related-data batch exceeds its safe limit.',
 			'The product export resource check could not read the database.',
 			'The product query cannot be preflighted within safe resource limits. Review query filters before exporting.',
@@ -282,6 +290,9 @@ final class Engine {
 		}
 		if ( ! empty( $config['excel_view'] ) && 2 !== ( $config['excel_cell_version'] ?? null ) ) {
 			throw new RuntimeException( 'This export used the old shortened Excel format. Start a new export to preserve full HTML.' );
+		}
+		if ( 1 !== ( $config['html_clean_version'] ?? null ) ) {
+			throw new RuntimeException( 'This export predates HTML cleaning. Start a new export to avoid mixing old and cleaned rows.' );
 		}
 		if ( 'finalizing' === $job['status'] ) {
 			$state = $this->files->finalize( $id, $state, $config );

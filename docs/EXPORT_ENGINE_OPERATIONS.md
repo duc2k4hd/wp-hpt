@@ -4,6 +4,8 @@ Sau hardening OOM, job mới mặc định initial 50/min 25/max 100; budget nh�
 
 ## Chuẩn bị và bật trên staging
 
+Bước làm sạch mô tả HTML cần PHP DOM ở cả PHP web và PHP cron. Job mới tự kiểm tra dependency trước khi chấp nhận chạy. Dùng bộ payload hiện tại (22 files, có `class-wc-product-export-html.php`); không chỉ upload file exporter mà bỏ helper. Sau khi nâng cấp HTML cleaning, tạo job mới để không trộn chunk cũ/chưa làm sạch với chunk mới.
+
 1. Backup code + database; xác nhận đúng staging và chủ sở hữu cho phép triển khai. Đối chiếu version/base/patch; không upload nguyên bản sao local chứa cấu hình hay dữ liệu test lên production.
 2. Provision PHP 64-bit >=7.4, MySQL/MariaDB, private local volume ngoài public root. ZIP cần PHP >=8.0. Cấp quyền ghi/chỉ đọc cho đúng OS user; không dùng thư mục world-writable hoặc symlink. Kiểm tra ACL trên Windows. Volume phải dùng chung nếu có nhiều worker.
 3. Dự trù staging rows + CSV cuối; ZIP STORE thêm một bản gần bằng CSV. Reserve 64 MiB không phải ước lượng toàn output. Theo dõi free space/inode/I/O; filtered/custom exports chưa có size forecast đáng tin cậy.
