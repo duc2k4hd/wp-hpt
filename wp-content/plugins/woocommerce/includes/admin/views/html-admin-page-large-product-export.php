@@ -33,16 +33,27 @@ $is_ready = ! $error && defined( 'WC_LARGE_PRODUCT_EXPORT' ) && true === WC_LARG
 			<?php endif; ?>
 			<table class="form-table" role="presentation">
 				<tr>
-					<th scope="row"><label for="wc-large-export-columns"><?php esc_html_e( 'Columns', 'woocommerce' ); ?></label></th>
+					<th scope="row"><?php esc_html_e( 'Các cột cần xuất', 'woocommerce' ); ?></th>
 					<td>
-						<select id="wc-large-export-columns" name="columns[]" class="wc-enhanced-select" multiple style="width:100%" data-placeholder="<?php esc_attr_e( 'Export all available columns', 'woocommerce' ); ?>">
-							<?php foreach ( $exporter->get_default_column_names() as $column_id => $column_name ) : ?>
-								<option value="<?php echo esc_attr( $column_id ); ?>"><?php echo esc_html( $column_name ); ?></option>
+						<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+							<button type="button" class="button" data-columns-action="all"><?php esc_html_e( 'Chọn tất cả', 'woocommerce' ); ?></button>
+							<button type="button" class="button" data-columns-action="none"><?php esc_html_e( 'Bỏ chọn tất cả', 'woocommerce' ); ?></button>
+							<span id="wc-large-export-column-count" aria-live="polite"><?php esc_html_e( 'Đã chọn 0 cột', 'woocommerce' ); ?></span>
+						</div>
+						<fieldset id="wc-large-export-columns" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;max-height:360px;overflow:auto;padding:12px;border:1px solid #c3c4c7">
+							<legend class="screen-reader-text"><?php esc_html_e( 'Chọn các cột cần xuất', 'woocommerce' ); ?></legend>
+							<?php
+							$selectable_columns = $exporter->get_column_names() + array(
+								'downloads'  => __( 'Tệp tải xuống (nhóm cột)', 'woocommerce' ),
+								'attributes' => __( 'Thuộc tính sản phẩm (nhóm cột)', 'woocommerce' ),
+								'meta'       => __( 'Metadata tùy chỉnh (nhóm cột)', 'woocommerce' ),
+							);
+							foreach ( $selectable_columns as $column_id => $column_name ) :
+								?>
+								<label><input type="checkbox" name="columns[]" value="<?php echo esc_attr( $column_id ); ?>"> <?php echo esc_html( $column_name ); ?></label>
 							<?php endforeach; ?>
-							<option value="downloads"><?php esc_html_e( 'Downloads', 'woocommerce' ); ?></option>
-							<option value="attributes"><?php esc_html_e( 'Attributes', 'woocommerce' ); ?></option>
-						</select>
-						<p class="description"><?php esc_html_e( 'Leave empty to export all columns, including registered custom columns.', 'woocommerce' ); ?></p>
+						</fieldset>
+						<p class="description"><?php esc_html_e( 'Chỉ xuất các cột đã tích. Cần chọn ít nhất một cột. Meta description lấy nội dung đã lưu trong Rank Math.', 'woocommerce' ); ?></p>
 					</td>
 				</tr>
 				<?php if ( ! $selected_ids ) : ?>
@@ -90,7 +101,6 @@ $is_ready = ! $error && defined( 'WC_LARGE_PRODUCT_EXPORT' ) && true === WC_LARG
 					<td>
 						<label><input type="checkbox" name="excel_view" value="1" checked> <?php esc_html_e( 'Giới hạn Excel 32.767 ký tự/ô, UTF-8 BOM.', 'woocommerce' ); ?></label>
 						<p class="description"><?php esc_html_e( 'Luôn làm sạch mô tả HTML trước khi xuất: bỏ br/class và thuộc tính ngoài a/img, sửa thẻ lồng sai, mỗi sản phẩm một dòng CSV. Bỏ chọn để không giới hạn độ dài; phần vượt giới hạn được cắt nhưng vẫn đóng đủ thẻ HTML.', 'woocommerce' ); ?></p>
-						<label><input type="checkbox" name="meta" value="1"> <?php esc_html_e( 'Export custom metadata', 'woocommerce' ); ?></label><br>
 						<label><input type="checkbox" name="spreadsheet" value="1" checked> <?php esc_html_e( 'Protect spreadsheet formula cells', 'woocommerce' ); ?></label><br>
 						<label><input type="checkbox" name="bom" value="1" checked> <?php esc_html_e( 'Include UTF-8 BOM', 'woocommerce' ); ?></label>
 					</td>

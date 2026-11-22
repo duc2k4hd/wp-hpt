@@ -25,6 +25,9 @@ final class Reader extends \WC_Product_CSV_Exporter {
 	 */
 	private $spreadsheet;
 
+	/** @var bool Export only explicitly selected columns and selected groups. */
+	private $strict_columns;
+
 	public function __construct( array $config ) {
 		// This class can be loaded while WooCommerce itself is bootstrapping.
 		// Defer the admin exporter until a worker/admin request has finished loading
@@ -33,7 +36,8 @@ final class Reader extends \WC_Product_CSV_Exporter {
 			require_once WC_ABSPATH . 'includes/admin/class-wc-admin-exporters.php';
 		}
 		parent::__construct();
-		$this->spreadsheet = $config['spreadsheet'];
+		$this->spreadsheet    = $config['spreadsheet'];
+		$this->strict_columns = ! empty( $config['strict_columns'] );
 		$this->set_excel_view( ! empty( $config['excel_view'] ) );
 		$this->set_product_types_to_export( $config['types'] );
 		$this->set_columns_to_export( $config['columns'] );
@@ -58,6 +62,19 @@ final class Reader extends \WC_Product_CSV_Exporter {
 
 	public function escape_data( $data ) {
 		return $this->spreadsheet ? parent::escape_data( $data ) : $data;
+	}
+
+	/** Avoid native exporter's implicit inclusion of every metadata column. */
+	public function is_column_exporting( $column_id ) {
+		if ( ! $this->strict_columns ) {
+			return parent::is_column_exporting( $column_id );
+		}
+		$selected = $this->get_columns_to_export();
+		if ( in_array( $column_id, $selected, true ) ) {
+			return true;
+		}
+		$group = strstr( $column_id, ':', true );
+		return in_array( $group, array( 'attributes', 'downloads', 'meta' ), true ) && in_array( $group, $selected, true );
 	}
 
 	/**
@@ -463,6 +480,10 @@ final class Reader extends \WC_Product_CSV_Exporter {
 				throw new RuntimeException( 'A product export row hook did not return a row.' );
 			}
 			foreach ( $row as $key => $value ) {
+				if ( ! $this->is_column_exporting( $key ) ) {
+					unset( $row[ $key ] );
+					continue;
+				}
 				$row[ $key ] = (string) $this->format_data( $value );
 			}
 			yield $row;

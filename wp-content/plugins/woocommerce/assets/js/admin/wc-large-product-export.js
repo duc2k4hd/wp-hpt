@@ -12,6 +12,16 @@
 	var $notice = $( '#wc-large-export-notice' );
 	var polling = false;
 	var timer = null;
+	var $columns = $form.find( 'input[name="columns[]"]' );
+	function updateColumnCount() {
+		$( '#wc-large-export-column-count' ).text( 'Đã chọn ' + $columns.filter( ':checked' ).length + ' cột' );
+	}
+	$form.on( 'click', '[data-columns-action]', function () {
+		$columns.prop( 'checked', $( this ).attr( 'data-columns-action' ) === 'all' );
+		updateColumnCount();
+	} );
+	$columns.on( 'change', updateColumnCount );
+	updateColumnCount();
 
 	function message( text, isError ) {
 		$notice.toggleClass( 'notice-error', !! isError ).toggleClass( 'notice-success', ! isError );
@@ -155,6 +165,10 @@
 	var pendingStart = null;
 	$form.on( 'submit', function ( event ) {
 		event.preventDefault();
+		if ( ! $columns.filter( ':checked' ).length ) {
+			message( 'Vui lòng tích chọn ít nhất một cột cần xuất.', true );
+			return;
+		}
 		var selection = $form.serialize();
 		// A timed-out Start may already have committed its job. Retain the token
 		// for a retry of the same selection until the server acknowledges it.

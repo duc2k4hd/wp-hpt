@@ -1,0 +1,1 @@
+{"test":"column-selection","passed":true,"empty_selection_rejected":true,"unknown_columns_rejected":true,"csv_selections":["sku+meta_description","sku","meta_description"],"no_extra_id_or_metadata_or_hook_columns":true,"rank_math_utf8_value_exact":true,"explicit_metadata_group":true,"checkbox_ui_rendered":true,"meta_description_checkbox_once":true}

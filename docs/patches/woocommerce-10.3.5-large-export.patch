@@ -1,9 +1,9 @@
 diff --git a/wp-content/plugins/woocommerce/assets/js/admin/wc-large-product-export.js b/wp-content/plugins/woocommerce/assets/js/admin/wc-large-product-export.js
 new file mode 100644
-index 00000000..253c62eb
+index 00000000..a7889820
 --- /dev/null
 +++ b/wp-content/plugins/woocommerce/assets/js/admin/wc-large-product-export.js
-@@ -0,0 +1,224 @@
+@@ -0,0 +1,238 @@
 +/* global jQuery, wc_large_product_export_params */
 +/* eslint-disable camelcase */
 +;( function ( $ ) {
@@ -18,6 +18,16 @@ index 00000000..253c62eb
 +	var $notice = $( '#wc-large-export-notice' );
 +	var polling = false;
 +	var timer = null;
++	var $columns = $form.find( 'input[name="columns[]"]' );
++	function updateColumnCount() {
++		$( '#wc-large-export-column-count' ).text( 'Đã chọn ' + $columns.filter( ':checked' ).length + ' cột' );
++	}
++	$form.on( 'click', '[data-columns-action]', function () {
++		$columns.prop( 'checked', $( this ).attr( 'data-columns-action' ) === 'all' );
++		updateColumnCount();
++	} );
++	$columns.on( 'change', updateColumnCount );
++	updateColumnCount();
 +
 +	function message( text, isError ) {
 +		$notice.toggleClass( 'notice-error', !! isError ).toggleClass( 'notice-success', ! isError );
@@ -161,6 +171,10 @@ index 00000000..253c62eb
 +	var pendingStart = null;
 +	$form.on( 'submit', function ( event ) {
 +		event.preventDefault();
++		if ( ! $columns.filter( ':checked' ).length ) {
++			message( 'Vui lòng tích chọn ít nhất một cột cần xuất.', true );
++			return;
++		}
 +		var selection = $form.serialize();
 +		// A timed-out Start may already have committed its job. Retain the token
 +		// for a retry of the same selection until the server acknowledges it.
@@ -367,10 +381,10 @@ index 5a4c3a9e..1675a9b0 100644
  			'woocommerce_export_get_ajax_query_args',
 diff --git a/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php b/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php
 new file mode 100644
-index 00000000..9e527b7b
+index 00000000..3cf4e4bd
 --- /dev/null
 +++ b/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,127 @@
 +<?php
 +/**
 + * Admin view: durable, opt-in large product CSV export.
@@ -406,16 +420,27 @@ index 00000000..9e527b7b
 +			<?php endif; ?>
 +			<table class="form-table" role="presentation">
 +				<tr>
-+					<th scope="row"><label for="wc-large-export-columns"><?php esc_html_e( 'Columns', 'woocommerce' ); ?></label></th>
++					<th scope="row"><?php esc_html_e( 'Các cột cần xuất', 'woocommerce' ); ?></th>
 +					<td>
-+						<select id="wc-large-export-columns" name="columns[]" class="wc-enhanced-select" multiple style="width:100%" data-placeholder="<?php esc_attr_e( 'Export all available columns', 'woocommerce' ); ?>">
-+							<?php foreach ( $exporter->get_default_column_names() as $column_id => $column_name ) : ?>
-+								<option value="<?php echo esc_attr( $column_id ); ?>"><?php echo esc_html( $column_name ); ?></option>
++						<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
++							<button type="button" class="button" data-columns-action="all"><?php esc_html_e( 'Chọn tất cả', 'woocommerce' ); ?></button>
++							<button type="button" class="button" data-columns-action="none"><?php esc_html_e( 'Bỏ chọn tất cả', 'woocommerce' ); ?></button>
++							<span id="wc-large-export-column-count" aria-live="polite"><?php esc_html_e( 'Đã chọn 0 cột', 'woocommerce' ); ?></span>
++						</div>
++						<fieldset id="wc-large-export-columns" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;max-height:360px;overflow:auto;padding:12px;border:1px solid #c3c4c7">
++							<legend class="screen-reader-text"><?php esc_html_e( 'Chọn các cột cần xuất', 'woocommerce' ); ?></legend>
++							<?php
++							$selectable_columns = $exporter->get_column_names() + array(
++								'downloads'  => __( 'Tệp tải xuống (nhóm cột)', 'woocommerce' ),
++								'attributes' => __( 'Thuộc tính sản phẩm (nhóm cột)', 'woocommerce' ),
++								'meta'       => __( 'Metadata tùy chỉnh (nhóm cột)', 'woocommerce' ),
++							);
++							foreach ( $selectable_columns as $column_id => $column_name ) :
++								?>
++								<label><input type="checkbox" name="columns[]" value="<?php echo esc_attr( $column_id ); ?>"> <?php echo esc_html( $column_name ); ?></label>
 +							<?php endforeach; ?>
-+							<option value="downloads"><?php esc_html_e( 'Downloads', 'woocommerce' ); ?></option>
-+							<option value="attributes"><?php esc_html_e( 'Attributes', 'woocommerce' ); ?></option>
-+						</select>
-+						<p class="description"><?php esc_html_e( 'Leave empty to export all columns, including registered custom columns.', 'woocommerce' ); ?></p>
++						</fieldset>
++						<p class="description"><?php esc_html_e( 'Chỉ xuất các cột đã tích. Cần chọn ít nhất một cột. Meta description lấy nội dung đã lưu trong Rank Math.', 'woocommerce' ); ?></p>
 +					</td>
 +				</tr>
 +				<?php if ( ! $selected_ids ) : ?>
@@ -463,7 +488,6 @@ index 00000000..9e527b7b
 +					<td>
 +						<label><input type="checkbox" name="excel_view" value="1" checked> <?php esc_html_e( 'Giới hạn Excel 32.767 ký tự/ô, UTF-8 BOM.', 'woocommerce' ); ?></label>
 +						<p class="description"><?php esc_html_e( 'Luôn làm sạch mô tả HTML trước khi xuất: bỏ br/class và thuộc tính ngoài a/img, sửa thẻ lồng sai, mỗi sản phẩm một dòng CSV. Bỏ chọn để không giới hạn độ dài; phần vượt giới hạn được cắt nhưng vẫn đóng đủ thẻ HTML.', 'woocommerce' ); ?></p>
-+						<label><input type="checkbox" name="meta" value="1"> <?php esc_html_e( 'Export custom metadata', 'woocommerce' ); ?></label><br>
 +						<label><input type="checkbox" name="spreadsheet" value="1" checked> <?php esc_html_e( 'Protect spreadsheet formula cells', 'woocommerce' ); ?></label><br>
 +						<label><input type="checkbox" name="bom" value="1" checked> <?php esc_html_e( 'Include UTF-8 BOM', 'woocommerce' ); ?></label>
 +					</td>
@@ -755,7 +779,7 @@ index 296131b8..6c2e51cd 100644
  	}
  }
 diff --git a/wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php b/wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php
-index fa9a6e77..14b865b8 100644
+index fa9a6e77..ae425db4 100644
 --- a/wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php
 +++ b/wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php
 @@ -23,10 +23,61 @@ if ( ! class_exists( 'WC_CSV_Batch_Exporter', false ) ) {
@@ -820,7 +844,15 @@ index fa9a6e77..14b865b8 100644
  
  	/**
  	 * Type of export used in filter names.
-@@ -229,7 +280,23 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -176,6 +227,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+ 			'featured'           => __( 'Is featured?', 'woocommerce' ),
+ 			'catalog_visibility' => __( 'Visibility in catalog', 'woocommerce' ),
+ 			'short_description'  => __( 'Short description', 'woocommerce' ),
++			'meta_description'   => __( 'Meta description', 'woocommerce' ),
+ 			'description'        => __( 'Description', 'woocommerce' ),
+ 			'date_on_sale_from'  => __( 'Date sale price starts', 'woocommerce' ),
+ 			'date_on_sale_to'    => __( 'Date sale price ends', 'woocommerce' ),
+@@ -229,7 +281,23 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  	 * @since 3.1.0
  	 */
  	public function prepare_data_to_export() {
@@ -845,7 +877,7 @@ index fa9a6e77..14b865b8 100644
  			'status'   => array( ProductStatus::PRIVATE, ProductStatus::PUBLISH, ProductStatus::DRAFT, ProductStatus::FUTURE, ProductStatus::PENDING ),
  			'limit'    => $this->get_limit(),
  			'page'     => $this->get_page(),
-@@ -258,16 +325,17 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -258,16 +326,17 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		 * @since 3.5.0
  		 * @param array $args Arguments to pass to wc_get_products().
  		 */
@@ -867,7 +899,7 @@ index fa9a6e77..14b865b8 100644
  		if ( 1 < $this->get_page() ) {
  			$cached_total = get_transient( $total_cache_key );
  		}
-@@ -281,7 +349,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -281,7 +350,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		$cursor_compatible = isset( $args['orderby'] )
  			&& array( 'ID' => 'ASC' ) === $args['orderby']
  			&& empty( $args['offset'] );
@@ -876,7 +908,7 @@ index fa9a6e77..14b865b8 100644
  			1 === $this->get_page()
  			|| ( $can_reuse_total && 0 < $cursor )
  		);
-@@ -291,7 +359,6 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -291,7 +360,6 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  				$args['wc_product_export_after_id'] = $cursor;
  			}
  		}
@@ -884,7 +916,7 @@ index fa9a6e77..14b865b8 100644
  		$cursor_filter = null;
  		if ( $use_cursor && 0 < $cursor ) {
  			$cursor_filter = static function ( $where, $query ) use ( $cursor ) {
-@@ -305,7 +372,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -305,7 +373,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		}
  
  		try {
@@ -893,7 +925,7 @@ index fa9a6e77..14b865b8 100644
  		} finally {
  			if ( $cursor_filter ) {
  				remove_filter( 'posts_where', $cursor_filter, 10 );
-@@ -323,6 +390,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -323,6 +391,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  				set_transient( $total_cache_key, $this->total_rows, max( HOUR_IN_SECONDS, $expiration ) );
  			}
  		}
@@ -903,7 +935,7 @@ index fa9a6e77..14b865b8 100644
  		if ( $use_cursor && empty( $product_rows ) ) {
  			// The first count is only a progress estimate. If rows disappear while
  			// exporting, finish at the actual cursor boundary instead of looping on
-@@ -330,8 +400,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -330,8 +401,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  			$this->total_rows = $this->get_total_exported();
  		}
  
@@ -915,7 +947,7 @@ index fa9a6e77..14b865b8 100644
  		$this->prime_export_batch_caches( $product_rows );
  		if ( $use_cursor && $product_rows ) {
  			$last_product = end( $product_rows );
-@@ -341,6 +412,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -341,6 +413,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		}
  
  		foreach ( $product_rows as $product ) {
@@ -923,7 +955,7 @@ index fa9a6e77..14b865b8 100644
  			// Check if the product is variable and if either the include or category filter is active.
  			// This is to ensure that product variations are only included if they are being selectively exported or if they are part of a category.
  			if ( ( ! empty( $args['include'] ) || ! empty( $args['category'] ) ) &&
-@@ -355,14 +427,25 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -355,14 +428,25 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		// If variable products were identified (either through include or category filters), fetch their variations.
  		if ( ! empty( $variable_products ) ) {
  			foreach ( $variable_products as $parent_id ) {
@@ -954,7 +986,7 @@ index fa9a6e77..14b865b8 100644
  
  				if ( ! $products ) {
  					continue;
-@@ -371,10 +454,16 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -371,10 +455,16 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  				$this->prime_export_batch_caches( $products );
  
  				foreach ( $products as $product ) {
@@ -971,7 +1003,7 @@ index fa9a6e77..14b865b8 100644
  	}
  
  	/**
-@@ -402,6 +491,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -402,6 +492,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  	 * @param WC_Product[] $products Products in the current export batch.
  	 */
  	protected function prime_export_batch_caches( $products ) {
@@ -979,7 +1011,7 @@ index fa9a6e77..14b865b8 100644
  		$attachment_ids = array();
  		$related_ids    = array();
  		$user_ids       = array();
-@@ -421,18 +511,23 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -421,18 +512,23 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  				}
  			}
  
@@ -1009,7 +1041,7 @@ index fa9a6e77..14b865b8 100644
  				$related_meta_ids = $product->get_meta( $related_meta_key, true, 'edit' );
  				if ( is_array( $related_meta_ids ) ) {
  					array_walk_recursive(
-@@ -448,10 +543,10 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -448,10 +544,10 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  				}
  			}
  
@@ -1022,7 +1054,7 @@ index fa9a6e77..14b865b8 100644
  			}
  		}
  
-@@ -460,11 +555,17 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -460,11 +556,17 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		$user_ids       = array_values( array_unique( array_filter( array_map( 'absint', $user_ids ) ) ) );
  
  		if ( $attachment_ids && function_exists( '_prime_post_caches' ) ) {
@@ -1042,7 +1074,7 @@ index fa9a6e77..14b865b8 100644
  		}
  
  		if ( $user_ids && function_exists( 'cache_users' ) ) {
-@@ -485,6 +586,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -485,6 +587,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		}
  
  		if ( ! array_key_exists( $product_id, $this->export_product_cache ) ) {
@@ -1050,7 +1082,7 @@ index fa9a6e77..14b865b8 100644
  			$this->export_product_cache[ $product_id ] = wc_get_product( $product_id );
  		}
  
-@@ -543,7 +645,19 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -543,7 +646,19 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		 * @param WC_Product              $product     The product object corresponding to the current row.
  		 * @param WC_Product_CSV_Exporter $exporter    The instance of the CSV exporter.
  		 */
@@ -1071,7 +1103,7 @@ index fa9a6e77..14b865b8 100644
  	}
  
  	/**
-@@ -875,8 +989,6 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -875,10 +990,14 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  	 * @return string
  	 */
  	protected function filter_description_field( $description ) {
@@ -1079,7 +1111,213 @@ index fa9a6e77..14b865b8 100644
 -		$description = str_replace( "\n", '\n', $description );
  		return $description;
  	}
++
++	/** Export the saved Rank Math description without inventing a fallback. */
++	protected function get_column_value_meta_description( $product ) {
++		$value = $product->get_meta( 'rank_math_description', true, 'edit' );
++		return is_scalar( $value ) ? $value : '';
++	}
  	/**
+ 	 * Export downloads.
+ 	 *
+diff --git a/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-html.php b/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-html.php
+new file mode 100644
+index 00000000..f07a363c
+--- /dev/null
++++ b/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-html.php
+@@ -0,0 +1,192 @@
++<?php
++/**
++ * Clean product-description fragments before CSV serialization.
++ *
++ * @package WooCommerce\Export
++ */
++
++defined( 'ABSPATH' ) || exit;
++
++// phpcs:disable WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- PHP DOM defines camelCase property names.
++
++/** Repairs HTML and serializes balanced, single-line description cells. */
++final class WC_Product_Export_HTML {
++	/** Check dependencies before accepting a potentially long export job. */
++	public static function assert_supported() {
++		if ( ! class_exists( 'DOMDocument' ) ) {
++			throw new RuntimeException( 'Product HTML cleaning requires the PHP DOM extension.' );
++		}
++	}
++
++	/**
++	 * Clean markup, preserving attributes only on links/images, except class.
++	 *
++	 * @param string   $html  Raw description fragment.
++	 * @param int|null $limit Optional Excel capacity in UTF-16 code units.
++	 * @return string
++	 */
++	public static function clean( $html, $limit = null ) {
++		self::assert_supported();
++		if ( '' === $html ) {
++			return '';
++		}
++		WC_Product_Export_Resources::check_memory( strlen( $html ) * 8 );
++		if ( ! mb_check_encoding( $html, 'UTF-8' ) ) {
++			$html = mb_convert_encoding( $html, 'UTF-8', 'UTF-8' );
++		}
++		$html = self::single_line( $html );
++		$dom  = new DOMDocument( '1.0', 'UTF-8' );
++		// No entity expansion, external DTD loading, or network requests. Keep the
++		// global libxml error buffer untouched; malformed fragments are expected.
++		$loaded = $dom->loadHTML(
++			'<?xml encoding="UTF-8"><!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' . $html . '</body></html>',
++			LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING
++		);
++		$body   = $dom->getElementsByTagName( 'body' )->item( 0 );
++		if ( ! $loaded || ! $body ) {
++			throw new RuntimeException( 'The product description HTML could not be repaired safely.' );
++		}
++		$state = array(
++			'parts'     => array(),
++			'remaining' => null === $limit ? PHP_INT_MAX : $limit,
++			'truncated' => false,
++			'nodes'     => 0,
++		);
++		foreach ( $body->childNodes as $child ) {
++			self::emit( $child, $state, array(), 0 );
++			if ( $state['truncated'] ) {
++				break;
++			}
++		}
++		return trim( implode( '', $state['parts'] ) );
++	}
++
++	/** Remove physical record separators without removing words. */
++	public static function single_line( $text ) {
++		return str_replace( array( "\r\n", "\r", "\n", "\t", "\u{0085}", "\u{2028}", "\u{2029}" ), ' ', $text );
++	}
++
++	/** Emit repaired DOM nodes, reserving capacity for every closing tag. */
++	private static function emit( $node, array &$state, array $ancestors, $depth ) {
++		if ( $state['truncated'] ) {
++			return;
++		}
++		if ( $depth > 128 ) {
++			throw new RuntimeException( 'The product description HTML is nested too deeply to export safely.' );
++		}
++		if ( 0 === ++$state['nodes'] % 256 ) {
++			WC_Product_Export_Resources::check_memory();
++		}
++		if ( XML_TEXT_NODE === $node->nodeType || XML_CDATA_SECTION_NODE === $node->nodeType ) {
++			self::text( preg_replace( '/[ \t\r\n\f\v]+/u', ' ', $node->nodeValue ), $state );
++			return;
++		}
++		if ( XML_ELEMENT_NODE !== $node->nodeType ) {
++			return; // Comments and processing instructions are not product content.
++		}
++		$tag = strtolower( $node->nodeName );
++		if ( in_array( $tag, array( 'script', 'style', 'meta', 'link', 'base' ), true ) ) {
++			return;
++		}
++		if ( 'br' === $tag ) {
++			self::text( ' ', $state );
++			return;
++		}
++		// Presentation wrappers carry no attributes after cleaning. Unwrap them,
++		// and duplicate formatting ancestors, while retaining their contents.
++		$unwrap = in_array( $tag, array( 'div', 'span', 'font' ), true ) ||
++			( in_array( $tag, array( 'b', 'strong', 'i', 'em', 'u' ), true ) && in_array( $tag, $ancestors, true ) );
++		if ( $unwrap ) {
++			if ( 'div' === $tag ) {
++				self::text( ' ', $state );
++			}
++			foreach ( $node->childNodes as $child ) {
++				self::emit( $child, $state, $ancestors, $depth + 1 );
++			}
++			if ( 'div' === $tag ) {
++				self::text( ' ', $state );
++			}
++			return;
++		}
++		$open = '<' . $tag;
++		if ( 'a' === $tag || 'img' === $tag ) {
++			foreach ( $node->attributes as $attribute ) {
++				if ( 'class' !== strtolower( $attribute->name ) ) {
++					$open .= ' ' . $attribute->name . '="' . htmlspecialchars( self::single_line( $attribute->value ), ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8' ) . '"';
++				}
++			}
++		}
++		$open .= '>';
++		$void  = in_array( $tag, array( 'area', 'col', 'embed', 'hr', 'img', 'input', 'param', 'source', 'track', 'wbr' ), true );
++		$close = $void ? '' : '</' . $tag . '>';
++		$cost  = self::units( $open . $close );
++		if ( $cost > $state['remaining'] ) {
++			$state['truncated'] = true;
++			return;
++		}
++		$state['remaining'] -= $cost;
++		$state['parts'][]    = $open;
++		if ( ! $void ) {
++			$content_start = count( $state['parts'] );
++			$ancestors[]   = $tag;
++			foreach ( $node->childNodes as $child ) {
++				self::emit( $child, $state, $ancestors, $depth + 1 );
++			}
++			if ( in_array( $tag, array( 'p', 'b', 'strong', 'i', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6' ), true ) ) {
++				$empty = true;
++				for ( $index = $content_start; $index < count( $state['parts'] ); ++$index ) {
++					if ( '' !== trim( $state['parts'][ $index ] ) ) {
++						$empty = false;
++						break;
++					}
++				}
++				if ( $empty ) {
++					$state['remaining'] += $cost;
++					while ( count( $state['parts'] ) >= $content_start ) {
++						$removed = array_pop( $state['parts'] );
++						if ( count( $state['parts'] ) >= $content_start ) {
++							$state['remaining'] += self::units( $removed );
++						}
++					}
++					return;
++				}
++			}
++			$state['parts'][] = $close;
++		}
++	}
++
++	/** Escape text and cut only at character/entity boundaries. */
++	private static function text( $text, array &$state ) {
++		if ( $state['parts'] && ' ' === substr( $state['parts'][ count( $state['parts'] ) - 1 ], -1 ) ) {
++			$text = ltrim( $text, ' ' );
++		}
++		if ( $state['truncated'] || '' === $text ) {
++			return;
++		}
++		$escaped = htmlspecialchars( $text, ENT_NOQUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8' );
++		$cost    = self::units( $escaped );
++		if ( $cost > $state['remaining'] ) {
++			$low  = 0;
++			$high = mb_strlen( $text, 'UTF-8' );
++			while ( $low < $high ) {
++				$mid       = (int) ceil( ( $low + $high ) / 2 );
++				$candidate = htmlspecialchars( mb_substr( $text, 0, $mid, 'UTF-8' ), ENT_NOQUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8' );
++				if ( self::units( $candidate ) <= $state['remaining'] ) {
++					$low = $mid;
++				} else {
++					$high = $mid - 1;
++				}
++			}
++			$escaped            = htmlspecialchars( mb_substr( $text, 0, $low, 'UTF-8' ), ENT_NOQUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8' );
++			$cost               = self::units( $escaped );
++			$state['truncated'] = true;
++		}
++		$state['parts'][]    = $escaped;
++		$state['remaining'] -= $cost;
++	}
++
++	/** Excel capacity counts UTF-16 code units, including escaped HTML markup. */
++	private static function units( $text ) {
++		return (int) ( strlen( mb_convert_encoding( $text, 'UTF-16LE', 'UTF-8' ) ) / 2 );
++	}
++}
 diff --git a/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-resources.php b/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-resources.php
 new file mode 100644
 index 00000000..5c63d165
@@ -1807,10 +2045,10 @@ index 00000000..c1b9133a
 +}
 diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php
 new file mode 100644
-index 00000000..bac1faaa
+index 00000000..a1864504
 --- /dev/null
 +++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php
-@@ -0,0 +1,509 @@
+@@ -0,0 +1,516 @@
 +<?php
 +/**
 + * Bounded export worker and immutable job configuration.
@@ -1865,11 +2103,12 @@ index 00000000..bac1faaa
 +			'mode'               => $options['mode'] ?? 'compatibility',
 +			'format'             => $options['format'] ?? 'csv',
 +			'columns'            => self::strings( $options['columns'] ?? array(), 1000 ),
++			'strict_columns'     => ! empty( $options['strict_columns'] ) || ! empty( $options['columns'] ),
 +			'types'              => self::strings( $options['types'] ?? array(), 100 ),
 +			'categories'         => array_map( 'sanitize_title_with_dashes', self::strings( $options['categories'] ?? array(), 500 ) ),
 +			'ids'                => array(),
 +			'statuses'           => self::strings( $options['statuses'] ?? array(), count( self::STATUSES ) ),
-+			'meta'               => ! empty( $options['meta'] ),
++			'meta'               => ! empty( $options['meta'] ) || in_array( 'meta', $options['columns'] ?? array(), true ),
 +			'bom'                => ! isset( $options['bom'] ) || (bool) $options['bom'],
 +			'spreadsheet'        => ! isset( $options['spreadsheet'] ) || (bool) $options['spreadsheet'],
 +			'excel_view'         => ! empty( $options['excel_view'] ),
@@ -1878,6 +2117,9 @@ index 00000000..bac1faaa
 +			'estimate'           => ! isset( $options['estimate'] ) || (bool) $options['estimate'],
 +			'consistency'        => 'live',
 +		);
++		if ( $config['strict_columns'] && ! $config['columns'] ) {
++			throw new InvalidArgumentException( 'Vui lòng tích chọn ít nhất một cột cần xuất.' );
++		}
 +		if ( $config['excel_view'] ) {
 +			$config['bom']         = true;
 +			$config['spreadsheet'] = true;
@@ -1920,6 +2162,9 @@ index 00000000..bac1faaa
 +		$config['batch_max'] = max( $config['batch_min'], min( 100, (int) apply_filters( 'woocommerce_large_export_batch_max', 100 ) ) );
 +		$config['batch']     = max( $config['batch_min'], min( $config['batch_max'], (int) apply_filters( 'woocommerce_large_export_batch_initial', 50 ) ) );
 +		$reader              = new Reader( $config );
++		if ( $config['strict_columns'] && array_diff( $config['columns'], array_merge( array_keys( $reader->get_column_names() ), array( 'downloads', 'attributes', 'meta' ) ) ) ) {
++			throw new InvalidArgumentException( 'Lựa chọn có cột không được hỗ trợ. Vui lòng tải lại trang và chọn lại.' );
++		}
 +		if ( ! class_exists( 'DOMDocument' ) ) {
 +			throw new InvalidArgumentException( 'Product HTML cleaning requires the PHP DOM extension.' );
 +		}
@@ -3161,10 +3406,10 @@ index 00000000..32dae1d7
 +}
 diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php
 new file mode 100644
-index 00000000..9739d3f2
+index 00000000..e7e6d003
 --- /dev/null
 +++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php
-@@ -0,0 +1,546 @@
+@@ -0,0 +1,547 @@
 +<?php
 +/**
 + * Admin UI, background queue, and protected download integration.
@@ -3286,7 +3531,7 @@ index 00000000..9739d3f2
 +			'wc-large-product-export',
 +			WC()->plugin_url() . '/assets/js/admin/wc-large-product-export.js',
 +			array( 'jquery' ),
-+			defined( 'WC_VERSION' ) ? WC_VERSION : false,
++			( defined( 'WC_VERSION' ) ? WC_VERSION : '1' ) . '-columns-2',
 +			true
 +		);
 +		wp_localize_script(
@@ -3359,16 +3604,17 @@ index 00000000..9739d3f2
 +			}
 +
 +			$options = array(
-+				'mode'        => isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : 'compatibility', // phpcs:ignore WordPress.Security.NonceVerification.Missing
-+				'format'      => isset( $_POST['file_format'] ) ? sanitize_key( wp_unslash( $_POST['file_format'] ) ) : 'csv', // phpcs:ignore WordPress.Security.NonceVerification.Missing
-+				'columns'     => self::post_strings( 'columns', 1000 ),
-+				'types'       => self::post_strings( 'types', 100 ),
-+				'categories'  => self::post_strings( 'categories', 500 ),
-+				'ids'         => $ids,
-+				'meta'        => ! empty( $_POST['meta'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
-+				'spreadsheet' => ! empty( $_POST['spreadsheet'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
-+				'bom'         => ! empty( $_POST['bom'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
-+				'excel_view'  => ! empty( $_POST['excel_view'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				'mode'           => isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : 'compatibility', // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				'format'         => isset( $_POST['file_format'] ) ? sanitize_key( wp_unslash( $_POST['file_format'] ) ) : 'csv', // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				'columns'        => self::post_strings( 'columns', 1000 ),
++				'strict_columns' => true,
++				'types'          => self::post_strings( 'types', 100 ),
++				'categories'     => self::post_strings( 'categories', 500 ),
++				'ids'            => $ids,
++				'meta'           => ! empty( $_POST['meta'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				'spreadsheet'    => ! empty( $_POST['spreadsheet'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				'bom'            => ! empty( $_POST['bom'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
++				'excel_view'     => ! empty( $_POST['excel_view'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
 +			);
 +			if ( isset( $_POST['request_id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 +				$request_id = sanitize_text_field( wp_unslash( $_POST['request_id'] ) );
@@ -3713,10 +3959,10 @@ index 00000000..9739d3f2
 +}
 diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php
 new file mode 100644
-index 00000000..5cdf6319
+index 00000000..be568f2c
 --- /dev/null
 +++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php
-@@ -0,0 +1,481 @@
+@@ -0,0 +1,502 @@
 +<?php
 +/**
 + * Bounded product selection and row transformation for background exports.
@@ -3744,6 +3990,9 @@ index 00000000..5cdf6319
 +	 */
 +	private $spreadsheet;
 +
++	/** @var bool Export only explicitly selected columns and selected groups. */
++	private $strict_columns;
++
 +	public function __construct( array $config ) {
 +		// This class can be loaded while WooCommerce itself is bootstrapping.
 +		// Defer the admin exporter until a worker/admin request has finished loading
@@ -3752,7 +4001,8 @@ index 00000000..5cdf6319
 +			require_once WC_ABSPATH . 'includes/admin/class-wc-admin-exporters.php';
 +		}
 +		parent::__construct();
-+		$this->spreadsheet = $config['spreadsheet'];
++		$this->spreadsheet    = $config['spreadsheet'];
++		$this->strict_columns = ! empty( $config['strict_columns'] );
 +		$this->set_excel_view( ! empty( $config['excel_view'] ) );
 +		$this->set_product_types_to_export( $config['types'] );
 +		$this->set_columns_to_export( $config['columns'] );
@@ -3777,6 +4027,19 @@ index 00000000..5cdf6319
 +
 +	public function escape_data( $data ) {
 +		return $this->spreadsheet ? parent::escape_data( $data ) : $data;
++	}
++
++	/** Avoid native exporter's implicit inclusion of every metadata column. */
++	public function is_column_exporting( $column_id ) {
++		if ( ! $this->strict_columns ) {
++			return parent::is_column_exporting( $column_id );
++		}
++		$selected = $this->get_columns_to_export();
++		if ( in_array( $column_id, $selected, true ) ) {
++			return true;
++		}
++		$group = strstr( $column_id, ':', true );
++		return in_array( $group, array( 'attributes', 'downloads', 'meta' ), true ) && in_array( $group, $selected, true );
 +	}
 +
 +	/**
@@ -4182,6 +4445,10 @@ index 00000000..5cdf6319
 +				throw new RuntimeException( 'A product export row hook did not return a row.' );
 +			}
 +			foreach ( $row as $key => $value ) {
++				if ( ! $this->is_column_exporting( $key ) ) {
++					unset( $row[ $key ] );
++					continue;
++				}
 +				$row[ $key ] = (string) $this->format_data( $value );
 +			}
 +			yield $row;
@@ -4876,201 +5143,3 @@ index 645d33fb..71a3171d 100644
                  <button class="button button-primary hpt-pie-primary" type="submit"><span class="dashicons dashicons-download"></span> Bắt đầu xuất</button>
              </form>
              <div id="hpt-pie-export-progress" class="hpt-pie-progress" style="display:none;"><strong class="hpt-pie-title">Đang xuất...</strong><div class="hpt-pie-track"><div class="hpt-pie-fill" style="width:0;"></div></div><div class="hpt-pie-meta"></div><p class="hpt-pie-actions"><button type="button" class="button hpt-pie-pause" data-type="export">Tạm dừng</button><button type="button" class="button hpt-pie-resume" data-type="export" style="display:none;">Tiếp tục</button><button type="button" class="button hpt-pie-cancel" data-type="export">Hủy</button><a class="button button-primary hpt-pie-download" style="display:none;" href="#"><span class="dashicons dashicons-download"></span> Tải file</a></p>
-diff --git a/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-html.php b/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-html.php
-new file mode 100644
-index 00000000..f07a363c
---- /dev/null
-+++ b/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-html.php
-@@ -0,0 +1,192 @@
-+<?php
-+/**
-+ * Clean product-description fragments before CSV serialization.
-+ *
-+ * @package WooCommerce\Export
-+ */
-+
-+defined( 'ABSPATH' ) || exit;
-+
-+// phpcs:disable WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- PHP DOM defines camelCase property names.
-+
-+/** Repairs HTML and serializes balanced, single-line description cells. */
-+final class WC_Product_Export_HTML {
-+	/** Check dependencies before accepting a potentially long export job. */
-+	public static function assert_supported() {
-+		if ( ! class_exists( 'DOMDocument' ) ) {
-+			throw new RuntimeException( 'Product HTML cleaning requires the PHP DOM extension.' );
-+		}
-+	}
-+
-+	/**
-+	 * Clean markup, preserving attributes only on links/images, except class.
-+	 *
-+	 * @param string   $html  Raw description fragment.
-+	 * @param int|null $limit Optional Excel capacity in UTF-16 code units.
-+	 * @return string
-+	 */
-+	public static function clean( $html, $limit = null ) {
-+		self::assert_supported();
-+		if ( '' === $html ) {
-+			return '';
-+		}
-+		WC_Product_Export_Resources::check_memory( strlen( $html ) * 8 );
-+		if ( ! mb_check_encoding( $html, 'UTF-8' ) ) {
-+			$html = mb_convert_encoding( $html, 'UTF-8', 'UTF-8' );
-+		}
-+		$html = self::single_line( $html );
-+		$dom  = new DOMDocument( '1.0', 'UTF-8' );
-+		// No entity expansion, external DTD loading, or network requests. Keep the
-+		// global libxml error buffer untouched; malformed fragments are expected.
-+		$loaded = $dom->loadHTML(
-+			'<?xml encoding="UTF-8"><!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' . $html . '</body></html>',
-+			LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING
-+		);
-+		$body   = $dom->getElementsByTagName( 'body' )->item( 0 );
-+		if ( ! $loaded || ! $body ) {
-+			throw new RuntimeException( 'The product description HTML could not be repaired safely.' );
-+		}
-+		$state = array(
-+			'parts'     => array(),
-+			'remaining' => null === $limit ? PHP_INT_MAX : $limit,
-+			'truncated' => false,
-+			'nodes'     => 0,
-+		);
-+		foreach ( $body->childNodes as $child ) {
-+			self::emit( $child, $state, array(), 0 );
-+			if ( $state['truncated'] ) {
-+				break;
-+			}
-+		}
-+		return trim( implode( '', $state['parts'] ) );
-+	}
-+
-+	/** Remove physical record separators without removing words. */
-+	public static function single_line( $text ) {
-+		return str_replace( array( "\r\n", "\r", "\n", "\t", "\u{0085}", "\u{2028}", "\u{2029}" ), ' ', $text );
-+	}
-+
-+	/** Emit repaired DOM nodes, reserving capacity for every closing tag. */
-+	private static function emit( $node, array &$state, array $ancestors, $depth ) {
-+		if ( $state['truncated'] ) {
-+			return;
-+		}
-+		if ( $depth > 128 ) {
-+			throw new RuntimeException( 'The product description HTML is nested too deeply to export safely.' );
-+		}
-+		if ( 0 === ++$state['nodes'] % 256 ) {
-+			WC_Product_Export_Resources::check_memory();
-+		}
-+		if ( XML_TEXT_NODE === $node->nodeType || XML_CDATA_SECTION_NODE === $node->nodeType ) {
-+			self::text( preg_replace( '/[ \t\r\n\f\v]+/u', ' ', $node->nodeValue ), $state );
-+			return;
-+		}
-+		if ( XML_ELEMENT_NODE !== $node->nodeType ) {
-+			return; // Comments and processing instructions are not product content.
-+		}
-+		$tag = strtolower( $node->nodeName );
-+		if ( in_array( $tag, array( 'script', 'style', 'meta', 'link', 'base' ), true ) ) {
-+			return;
-+		}
-+		if ( 'br' === $tag ) {
-+			self::text( ' ', $state );
-+			return;
-+		}
-+		// Presentation wrappers carry no attributes after cleaning. Unwrap them,
-+		// and duplicate formatting ancestors, while retaining their contents.
-+		$unwrap = in_array( $tag, array( 'div', 'span', 'font' ), true ) ||
-+			( in_array( $tag, array( 'b', 'strong', 'i', 'em', 'u' ), true ) && in_array( $tag, $ancestors, true ) );
-+		if ( $unwrap ) {
-+			if ( 'div' === $tag ) {
-+				self::text( ' ', $state );
-+			}
-+			foreach ( $node->childNodes as $child ) {
-+				self::emit( $child, $state, $ancestors, $depth + 1 );
-+			}
-+			if ( 'div' === $tag ) {
-+				self::text( ' ', $state );
-+			}
-+			return;
-+		}
-+		$open = '<' . $tag;
-+		if ( 'a' === $tag || 'img' === $tag ) {
-+			foreach ( $node->attributes as $attribute ) {
-+				if ( 'class' !== strtolower( $attribute->name ) ) {
-+					$open .= ' ' . $attribute->name . '="' . htmlspecialchars( self::single_line( $attribute->value ), ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8' ) . '"';
-+				}
-+			}
-+		}
-+		$open .= '>';
-+		$void  = in_array( $tag, array( 'area', 'col', 'embed', 'hr', 'img', 'input', 'param', 'source', 'track', 'wbr' ), true );
-+		$close = $void ? '' : '</' . $tag . '>';
-+		$cost  = self::units( $open . $close );
-+		if ( $cost > $state['remaining'] ) {
-+			$state['truncated'] = true;
-+			return;
-+		}
-+		$state['remaining'] -= $cost;
-+		$state['parts'][]    = $open;
-+		if ( ! $void ) {
-+			$content_start = count( $state['parts'] );
-+			$ancestors[]   = $tag;
-+			foreach ( $node->childNodes as $child ) {
-+				self::emit( $child, $state, $ancestors, $depth + 1 );
-+			}
-+			if ( in_array( $tag, array( 'p', 'b', 'strong', 'i', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6' ), true ) ) {
-+				$empty = true;
-+				for ( $index = $content_start; $index < count( $state['parts'] ); ++$index ) {
-+					if ( '' !== trim( $state['parts'][ $index ] ) ) {
-+						$empty = false;
-+						break;
-+					}
-+				}
-+				if ( $empty ) {
-+					$state['remaining'] += $cost;
-+					while ( count( $state['parts'] ) >= $content_start ) {
-+						$removed = array_pop( $state['parts'] );
-+						if ( count( $state['parts'] ) >= $content_start ) {
-+							$state['remaining'] += self::units( $removed );
-+						}
-+					}
-+					return;
-+				}
-+			}
-+			$state['parts'][] = $close;
-+		}
-+	}
-+
-+	/** Escape text and cut only at character/entity boundaries. */
-+	private static function text( $text, array &$state ) {
-+		if ( $state['parts'] && ' ' === substr( $state['parts'][ count( $state['parts'] ) - 1 ], -1 ) ) {
-+			$text = ltrim( $text, ' ' );
-+		}
-+		if ( $state['truncated'] || '' === $text ) {
-+			return;
-+		}
-+		$escaped = htmlspecialchars( $text, ENT_NOQUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8' );
-+		$cost    = self::units( $escaped );
-+		if ( $cost > $state['remaining'] ) {
-+			$low  = 0;
-+			$high = mb_strlen( $text, 'UTF-8' );
-+			while ( $low < $high ) {
-+				$mid       = (int) ceil( ( $low + $high ) / 2 );
-+				$candidate = htmlspecialchars( mb_substr( $text, 0, $mid, 'UTF-8' ), ENT_NOQUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8' );
-+				if ( self::units( $candidate ) <= $state['remaining'] ) {
-+					$low = $mid;
-+				} else {
-+					$high = $mid - 1;
-+				}
-+			}
-+			$escaped            = htmlspecialchars( mb_substr( $text, 0, $low, 'UTF-8' ), ENT_NOQUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8' );
-+			$cost               = self::units( $escaped );
-+			$state['truncated'] = true;
-+		}
-+		$state['parts'][]    = $escaped;
-+		$state['remaining'] -= $cost;
-+	}
-+
-+	/** Excel capacity counts UTF-16 code units, including escaped HTML markup. */
-+	private static function units( $text ) {
-+		return (int) ( strlen( mb_convert_encoding( $text, 'UTF-16LE', 'UTF-8' ) ) / 2 );
-+	}
-+}

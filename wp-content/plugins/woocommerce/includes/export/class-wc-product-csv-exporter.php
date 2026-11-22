@@ -227,6 +227,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 			'featured'           => __( 'Is featured?', 'woocommerce' ),
 			'catalog_visibility' => __( 'Visibility in catalog', 'woocommerce' ),
 			'short_description'  => __( 'Short description', 'woocommerce' ),
+			'meta_description'   => __( 'Meta description', 'woocommerce' ),
 			'description'        => __( 'Description', 'woocommerce' ),
 			'date_on_sale_from'  => __( 'Date sale price starts', 'woocommerce' ),
 			'date_on_sale_to'    => __( 'Date sale price ends', 'woocommerce' ),
@@ -990,6 +991,12 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
 	 */
 	protected function filter_description_field( $description ) {
 		return $description;
+	}
+
+	/** Export the saved Rank Math description without inventing a fallback. */
+	protected function get_column_value_meta_description( $product ) {
+		$value = $product->get_meta( 'rank_math_description', true, 'edit' );
+		return is_scalar( $value ) ? $value : '';
 	}
 	/**
 	 * Export downloads.

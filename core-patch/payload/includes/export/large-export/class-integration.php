@@ -119,7 +119,7 @@ final class Integration {
 			'wc-large-product-export',
 			WC()->plugin_url() . '/assets/js/admin/wc-large-product-export.js',
 			array( 'jquery' ),
-			defined( 'WC_VERSION' ) ? WC_VERSION : false,
+			( defined( 'WC_VERSION' ) ? WC_VERSION : '1' ) . '-columns-2',
 			true
 		);
 		wp_localize_script(
@@ -192,16 +192,17 @@ final class Integration {
 			}
 
 			$options = array(
-				'mode'        => isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : 'compatibility', // phpcs:ignore WordPress.Security.NonceVerification.Missing
-				'format'      => isset( $_POST['file_format'] ) ? sanitize_key( wp_unslash( $_POST['file_format'] ) ) : 'csv', // phpcs:ignore WordPress.Security.NonceVerification.Missing
-				'columns'     => self::post_strings( 'columns', 1000 ),
-				'types'       => self::post_strings( 'types', 100 ),
-				'categories'  => self::post_strings( 'categories', 500 ),
-				'ids'         => $ids,
-				'meta'        => ! empty( $_POST['meta'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
-				'spreadsheet' => ! empty( $_POST['spreadsheet'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
-				'bom'         => ! empty( $_POST['bom'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
-				'excel_view'  => ! empty( $_POST['excel_view'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'mode'           => isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : 'compatibility', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'format'         => isset( $_POST['file_format'] ) ? sanitize_key( wp_unslash( $_POST['file_format'] ) ) : 'csv', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'columns'        => self::post_strings( 'columns', 1000 ),
+				'strict_columns' => true,
+				'types'          => self::post_strings( 'types', 100 ),
+				'categories'     => self::post_strings( 'categories', 500 ),
+				'ids'            => $ids,
+				'meta'           => ! empty( $_POST['meta'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'spreadsheet'    => ! empty( $_POST['spreadsheet'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'bom'            => ! empty( $_POST['bom'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'excel_view'     => ! empty( $_POST['excel_view'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			);
 			if ( isset( $_POST['request_id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 				$request_id = sanitize_text_field( wp_unslash( $_POST['request_id'] ) );

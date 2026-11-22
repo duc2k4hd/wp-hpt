@@ -52,11 +52,12 @@ final class Engine {
 			'mode'               => $options['mode'] ?? 'compatibility',
 			'format'             => $options['format'] ?? 'csv',
 			'columns'            => self::strings( $options['columns'] ?? array(), 1000 ),
+			'strict_columns'     => ! empty( $options['strict_columns'] ) || ! empty( $options['columns'] ),
 			'types'              => self::strings( $options['types'] ?? array(), 100 ),
 			'categories'         => array_map( 'sanitize_title_with_dashes', self::strings( $options['categories'] ?? array(), 500 ) ),
 			'ids'                => array(),
 			'statuses'           => self::strings( $options['statuses'] ?? array(), count( self::STATUSES ) ),
-			'meta'               => ! empty( $options['meta'] ),
+			'meta'               => ! empty( $options['meta'] ) || in_array( 'meta', $options['columns'] ?? array(), true ),
 			'bom'                => ! isset( $options['bom'] ) || (bool) $options['bom'],
 			'spreadsheet'        => ! isset( $options['spreadsheet'] ) || (bool) $options['spreadsheet'],
 			'excel_view'         => ! empty( $options['excel_view'] ),
@@ -65,6 +66,9 @@ final class Engine {
 			'estimate'           => ! isset( $options['estimate'] ) || (bool) $options['estimate'],
 			'consistency'        => 'live',
 		);
+		if ( $config['strict_columns'] && ! $config['columns'] ) {
+			throw new InvalidArgumentException( 'Vui lòng tích chọn ít nhất một cột cần xuất.' );
+		}
 		if ( $config['excel_view'] ) {
 			$config['bom']         = true;
 			$config['spreadsheet'] = true;
@@ -107,6 +111,9 @@ final class Engine {
 		$config['batch_max'] = max( $config['batch_min'], min( 100, (int) apply_filters( 'woocommerce_large_export_batch_max', 100 ) ) );
 		$config['batch']     = max( $config['batch_min'], min( $config['batch_max'], (int) apply_filters( 'woocommerce_large_export_batch_initial', 50 ) ) );
 		$reader              = new Reader( $config );
+		if ( $config['strict_columns'] && array_diff( $config['columns'], array_merge( array_keys( $reader->get_column_names() ), array( 'downloads', 'attributes', 'meta' ) ) ) ) {
+			throw new InvalidArgumentException( 'Lựa chọn có cột không được hỗ trợ. Vui lòng tải lại trang và chọn lại.' );
+		}
 		if ( ! class_exists( 'DOMDocument' ) ) {
 			throw new InvalidArgumentException( 'Product HTML cleaning requires the PHP DOM extension.' );
 		}

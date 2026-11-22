@@ -1,13 +1,13 @@
 {
   "base": "c8e7a752e287e4e30c146686181746da55e3e6a9",
-  "parent_commit": "ac22a89486c87a6d377b4e9441f2dfbc18970a74",
+  "parent_commit": "543eabdb7c10f5b568d696a506bbacaf4702ed91",
   "apply_check": true,
   "reverse_check": true,
-  "patch_sha256": "1dabac933aa49de0eca26085c8b845c0f1c768e057b218be2ba8f21799d14952",
+  "patch_sha256": "a0434c3828648c3627ee532c657014ba6ad27d436e3b9f4b54aba1d8231eedd6",
   "files": [
     {
       "path": "wp-content/plugins/woocommerce/assets/js/admin/wc-large-product-export.js",
-      "sha256": "76e449ca2102102a190ee35cf1583ea011a317825b1679893ab58c8680b2f18b",
+      "sha256": "91f222baefde361a67ddbec8125358e093cea07eeb8646f5dd5528956eb7ca13",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
@@ -35,7 +35,7 @@
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php",
-      "sha256": "5998e5da027f951c8f69fac390c1e9e2d0f81a803900813f1d6160348f2f19ad",
+      "sha256": "ca19753fa1e1cc8af8e1f10c06ea065419e652be4a2fa8aeecebbb5e1e6e4e0e",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
@@ -70,7 +70,7 @@
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php",
-      "sha256": "5ffc288cdec8280ec276dc23124adc5e29b88352a10a991bfdd1d8d342b89fb5",
+      "sha256": "44b71fabeb3983b549b78c8e923cb41aa27d637e06d913b281032c089b3aafb3",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
@@ -91,7 +91,7 @@
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php",
-      "sha256": "302dc5466c22c3f307b5fd216e168a6668ebbbd2ee180021959f69a1da83a902",
+      "sha256": "1bb17aa32fd48a4b73a4171371c51b22f43053df0c41f62bf656ee3fbb864559",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
@@ -105,14 +105,14 @@
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php",
-      "sha256": "64617fa65c88eca2ed20ed180f2af019a2a8b87d6e586820a8731c8097aedf70",
+      "sha256": "d8c8f5e722f4ecb5e9595be9a997f7e8be590e0312e047ef9009754b74509052",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php",
-      "sha256": "0d2c1bdf1325dfb5489a5c8d792b6b79bbfead2fff6933e2e8a80c923a5f3aeb",
+      "sha256": "ecfd375c006de179e862bd0dbcffc80199f7c6add88c1e0c8da04fa4101b3137",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
