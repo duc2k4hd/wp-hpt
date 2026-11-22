@@ -1,9 +1,9 @@
 {
   "base": "c8e7a752e287e4e30c146686181746da55e3e6a9",
-  "parent_commit": "6cd003b247921c3acc170950037e497462c89a46",
+  "parent_commit": "3856351b76c3852b144dc0c8345f232c978ec30b",
   "apply_check": true,
   "reverse_check": true,
-  "patch_sha256": "2b79fbe1e505217605ec4df949e779d98ec98c4fe91221a65c40531e4179008a",
+  "patch_sha256": "d4c6b6a047a7f0bf7815db9de6a5571d41a01fe7ef471d8cd771550f93148ca0",
   "files": [
     {
       "path": "wp-content/plugins/woocommerce/assets/js/admin/wc-large-product-export.js",
@@ -35,14 +35,14 @@
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php",
-      "sha256": "48473ba7ddb5a8b1e01f2318214ac2b480efefc07e37ea3a502a1b36736aa761",
+      "sha256": "5ea94be905d2cb3ad674e1d8ed35ba1d2fcdc7c4b0a1bd878e515b6a86cc78ac",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-product-export.php",
-      "sha256": "6e54b47293fca350918042159578aaf200694388b452cd86c83a446479201fce",
+      "sha256": "7f20a0e7a5b6e6fdd049f1042e3024f37d7574eaccb7a330bcf98dd0dc790cbb",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
@@ -70,7 +70,7 @@
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php",
-      "sha256": "8c739b4262721d97096c416dfaff89bc67fe626611598e921d205bc933e428a2",
+      "sha256": "304ef980211b2452759e14fe2a01e1cf2a3204bbd7fab8501439bb80be172d01",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
@@ -84,14 +84,14 @@
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-command.php",
-      "sha256": "f1be583b0aee2e9e2c4734ce932ddb9dd9cc4181a6137bced339abdb86f51934",
+      "sha256": "7408c3bd4c63966e7878cf8f317ecff9110afb5d5224eda896d0474952251bed",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php",
-      "sha256": "6a900d135a01a2cece19e4b7f7bda15dffd3312e5f2472ceedd51bb9cd188db2",
+      "sha256": "1126670929ffe8eb434558d445a762bc90ebb9155c5dc9626d9ae876f6702296",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
@@ -105,14 +105,14 @@
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php",
-      "sha256": "aad57bc5732c866b8795618f97417eb67ee35db776fdb192b245723b8c9948e7",
+      "sha256": "64617fa65c88eca2ed20ed180f2af019a2a8b87d6e586820a8731c8097aedf70",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php",
-      "sha256": "858583d4eff0647581dd1372df5c057b54cd887fef4df10f9d578d537d7bc360",
+      "sha256": "0d2c1bdf1325dfb5489a5c8d792b6b79bbfead2fff6933e2e8a80c923a5f3aeb",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true
@@ -133,12 +133,12 @@
     },
     {
       "path": "wp-content/themes/flatsome-child/paths/product-import-export-tools.php",
-      "sha256": "239dc0e4ea940ec2734f7ebb81386d48cd803c1d64db56889daf1b02213fdfc6",
+      "sha256": "148e5f6dfb06ff1cc6bdcf6ff4694b33a3f931052aadbff274e4ec27f880ac48",
       "applied_matches_source": true
     },
     {
       "path": "wp-content/plugins/woocommerce/includes/export/class-wc-product-export-resources.php",
-      "sha256": "77b333e6a29c7e429411343cd9db2f78e2a97a184f62c023ac4bce6cd7a185fc",
+      "sha256": "c22b31a47136942e4fefe57a7c506e348a97e21193cbdd688dcf53a9436e1a2f",
       "applied_matches_source": true,
       "payload_matches_source": true,
       "staging_matches_source": true

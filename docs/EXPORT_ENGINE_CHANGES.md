@@ -1,5 +1,9 @@
 # Thay đổi Large Export Engine
 
+Sửa giới hạn ô Excel theo yêu cầu giữ HTML: bỏ việc strip tags, decode entities, gộp dòng và cắt 120 ký tự. Nội dung chỉ cắt khi vượt 32.767 đơn vị UTF-16 của ô Excel; giữ nguyên tiền tố nội dung, không thêm dấu ba chấm, không cắt giữa emoji. Native/background/HPT dùng cùng formatter; các form và trợ giúp CLI đã sửa mô tả. Config mới có `excel_cell_version=2`; job cũ dùng chế độ cắt 120 bị dừng ngay nếu tiếp tục chạy, tránh trộn các chunk khác định dạng. File đã xuất bị cắt phải tạo lần xuất mới từ database.
+
+Lượt sửa 22/11/2026: URL download trong JSON dùng `add_query_arg` với nonce thô thay cho `wp_nonce_url` (hàm sau escape HTML thành `&amp;`, sai khi jQuery gán vào href). Giữ nguyên kiểm tra nonce/quyền và file của job completed; chỉ cần tải lại trang để nhận link mới, không cần xuất lại. Bỏ ước tính tổng từ `information_schema.TABLE_ROWS` vì gồm ảnh/revision/post types khác; checkpoint cũ cũng không hiển thị số này như tổng sản phẩm. Xóa lỗi hiện tại khi commit batch thành công, không hiển thị lỗi đã phục hồi dưới job completed; lịch sử lỗi vẫn giữ trong worker log. Đối chiếu ID chọn ở SQL preflight với ID hydrate: trả thiếu sẽ dừng và giữ checkpoint, không được coi là EOF hay âm thầm bỏ sản phẩm. Kiểm chứng phục hồi sau lỗi bộ nhớ giữ đủ ID theo thứ tự; legacy/compatibility/keyset vẫn byte-identical.
+
 Lượt sửa OOM sau commit `6cd003b2`: chi tiết trong `EXPORT_ENGINE_OOM_FIX.md`. Có thêm sửa exporter/admin legacy, lớp `WC_Product_Export_Resources`, giới hạn download và đồng bộ đầy đủ `core-patch/payload/`. Các mô tả "không sửa legacy" bên dưới chỉ áp dụng lượt trước.
 
 Base: Git `c8e7a752` (đầy đủ commit hash trong evidence/version report), WordPress 6.8.2, WooCommerce 10.3.5, PHP tối thiểu 7.4. Công việc tiếp tục từ các file chưa commit trên nhánh `wc-export-engine-complete-20261121`; đã sao lưu trước sửa và tạo nhánh `wc-export-engine-hardening-20261121`. Không revert/commit đè thay đổi trước đó.

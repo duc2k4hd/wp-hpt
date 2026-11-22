@@ -29,28 +29,33 @@ require_once __DIR__ . '/class-wc-product-export-resources.php';
  * WC_Product_CSV_Exporter Class.
  */
 class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
-	/** @var bool Explicitly lossy display export; full exports remain import compatible. */
+	/** @var bool Limit cells to Excel's capacity while preserving their HTML content. */
 	protected $excel_view = false;
 
-	/** Select single-line, shortened text for viewing in Excel. */
+	/** Select Excel cell limits without stripping HTML or line breaks. */
 	public function set_excel_view( $enabled ) {
 		$this->excel_view = (bool) $enabled;
 	}
 
-	/** Format display cells before applying the existing formula protection. */
+	/** Preserve content and cap the final cell, including formula protection. */
 	public function format_data( $data ) {
-		if ( $this->excel_view && is_string( $data ) ) {
-			$data = wp_check_invalid_utf8( $data, true );
-			$data = preg_replace( '/<\s*br\s*\/?\s*>|<\/(?:p|div|li|tr|h[1-6])\s*>/iu', ' ', $data );
-			$data = wp_strip_all_tags( $data );
-			$data = html_entity_decode( $data, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-			$data = trim( preg_replace( '/[\p{Z}\s\x00-\x1f\x7f]+/u', ' ', $data ) );
-			// Leave one character for formula escaping. Cut at a Unicode character boundary.
-			if ( mb_strlen( $data, 'UTF-8' ) > 119 ) {
-				$data = mb_substr( $data, 0, 118, 'UTF-8' ) . '…';
-			}
+		$data = parent::format_data( $data );
+		if ( ! $this->excel_view || ! is_string( $data ) ) {
+			return $data;
 		}
-		return parent::format_data( $data );
+		// Bound the temporary string before UTF-16 conversion. Excel's cell limit
+		// is 32,767 UTF-16 code units; supplementary characters consume two units.
+		$data  = mb_substr( $data, 0, 32767, 'UTF-8' );
+		$utf16 = mb_convert_encoding( $data, 'UTF-16LE', 'UTF-8' );
+		if ( strlen( $utf16 ) <= 65534 ) {
+			return $data;
+		}
+		$utf16 = substr( $utf16, 0, 65534 );
+		$last  = unpack( 'v', substr( $utf16, -2 ) )[1];
+		if ( 0xD800 <= $last && 0xDBFF >= $last ) {
+			$utf16 = substr( $utf16, 0, -2 );
+		}
+		return mb_convert_encoding( $utf16, 'UTF-8', 'UTF-16LE' );
 	}
 
 	/** @var int|null Primary records processed, excluding expanded variations. */

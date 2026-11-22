@@ -86,18 +86,8 @@ final class Reader extends \WC_Product_CSV_Exporter {
 			'mode'        => $cpt ? $config['mode'] : 'compatibility',
 			'cpt'         => $cpt,
 		);
-		if ( $cpt ) {
-			// A cheap upper bound for the default catalog selection. Filtered totals may be unknown.
-			if ( $config['estimate'] && Engine::STATUSES === $config['statuses'] &&
-				! $config['ids'] && ! $config['categories'] && array_keys( \WC_Admin_Exporters::get_product_types() ) === $config['types'] &&
-				! has_filter( 'woocommerce_product_export_product_query_args' ) && ! has_filter( 'woocommerce_product_object_query_args' ) &&
-				! has_filter( 'woocommerce_product_object_query' ) && ! has_filter( 'woocommerce_product_data_store_cpt_get_products_query' ) ) {
-				$estimate = $wpdb->get_var( $wpdb->prepare( 'SELECT SUM(TABLE_ROWS) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $wpdb->posts ) );
-				if ( ! $wpdb->last_error && (int) $estimate > 0 ) {
-					$state['estimate'] = (int) $estimate;
-				}
-			}
-		}
+		// TABLE_ROWS counts attachments, revisions and other post types too.
+		// Keep totals unknown rather than presenting the entire posts table as products.
 		return $state;
 	}
 
@@ -333,8 +323,13 @@ final class Reader extends \WC_Product_CSV_Exporter {
 				add_filter( 'split_the_query', $split, PHP_INT_MAX, 2 );
 			}
 		}
-		$preflight = static function ( $request, $query ) use ( $marker, $args ) {
-			return \WC_Product_Export_Resources::preflight( $request, $query, $marker, $args['limit'], 'wc_large_export_query' );
+		$selected_ids = null;
+		$preflight    = static function ( $request, $query ) use ( $marker, $args, &$selected_ids ) {
+			$request = \WC_Product_Export_Resources::preflight( $request, $query, $marker, $args['limit'], 'wc_large_export_query' );
+			if ( $marker === $query->get( 'wc_large_export_query' ) ) {
+				$selected_ids = $query->get( 'wc_safe_export_selected_ids' );
+			}
+			return $request;
 		};
 		add_filter( 'posts_request', $preflight, PHP_INT_MAX, 2 );
 		$found = static function ( $sql, $query ) use ( $marker ) {
@@ -375,6 +370,9 @@ final class Reader extends \WC_Product_CSV_Exporter {
 		}
 		if ( $prime_meta && ! $meta_primed && $products ) {
 			self::prime_crud_metadata( $products );
+		}
+		if ( $bounded_cpt && array_keys( $ids ) !== $selected_ids ) {
+			throw new RuntimeException( 'The product query did not hydrate every selected product. The export was stopped to prevent missing rows.' );
 		}
 		return $products;
 	}

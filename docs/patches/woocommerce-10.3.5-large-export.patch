@@ -367,7 +367,7 @@ index 5a4c3a9e..1675a9b0 100644
  			'woocommerce_export_get_ajax_query_args',
 diff --git a/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php b/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php
 new file mode 100644
-index 00000000..0eef502d
+index 00000000..4339cd57
 --- /dev/null
 +++ b/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-large-product-export.php
 @@ -0,0 +1,117 @@
@@ -461,8 +461,8 @@ index 00000000..0eef502d
 +				<tr>
 +					<th scope="row"><?php esc_html_e( 'CSV options', 'woocommerce' ); ?></th>
 +					<td>
-+						<label><input type="checkbox" name="excel_view" value="1" checked> <?php esc_html_e( 'Bản xem Excel: bỏ HTML, gộp xuống dòng, cắt mỗi ô tối đa 120 ký tự, UTF-8 BOM.', 'woocommerce' ); ?></label>
-+						<p class="description"><?php esc_html_e( 'Bỏ chọn để giữ nội dung đầy đủ khi nhập lại sản phẩm. Bản xem bị cắt dữ liệu. CSV không lưu độ rộng cột; cần chỉnh độ rộng cột trong Excel.', 'woocommerce' ); ?></p>
++						<label><input type="checkbox" name="excel_view" value="1" checked> <?php esc_html_e( 'Giới hạn ô Excel: giữ nguyên HTML và xuống dòng, chỉ cắt phần vượt 32.767 ký tự/ô, UTF-8 BOM.', 'woocommerce' ); ?></label>
++						<p class="description"><?php esc_html_e( 'Bỏ chọn nếu cần xuất không giới hạn độ dài để sao lưu hoặc nhập lại. Nội dung nhiều dòng được đặt trong cùng một ô CSV. CSV không lưu độ rộng cột.', 'woocommerce' ); ?></p>
 +						<label><input type="checkbox" name="meta" value="1"> <?php esc_html_e( 'Export custom metadata', 'woocommerce' ); ?></label><br>
 +						<label><input type="checkbox" name="spreadsheet" value="1" checked> <?php esc_html_e( 'Protect spreadsheet formula cells', 'woocommerce' ); ?></label><br>
 +						<label><input type="checkbox" name="bom" value="1" checked> <?php esc_html_e( 'Include UTF-8 BOM', 'woocommerce' ); ?></label>
@@ -489,7 +489,7 @@ index 00000000..0eef502d
 +	</table>
 +</div>
 diff --git a/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-product-export.php b/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-product-export.php
-index a93c376a..46863a88 100644
+index a93c376a..f6639571 100644
 --- a/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-product-export.php
 +++ b/wp-content/plugins/woocommerce/includes/admin/views/html-admin-page-product-export.php
 @@ -136,6 +136,10 @@ if ( ! empty( $_GET['product_ids'] ) ) {
@@ -497,8 +497,8 @@ index a93c376a..46863a88 100644
  						</tr>
  						<?php do_action( 'woocommerce_product_export_row' ); ?>
 +						<tr>
-+							<th scope="row"><label for="woocommerce-exporter-excel-view"><?php esc_html_e( 'Bản xem Excel', 'woocommerce' ); ?></label></th>
-+							<td><label><input type="checkbox" id="woocommerce-exporter-excel-view" checked> <?php esc_html_e( 'Bỏ HTML, gộp xuống dòng, cắt mỗi ô tối đa 120 ký tự. Bỏ chọn để xuất đầy đủ khi nhập lại sản phẩm. CSV không lưu độ rộng cột.', 'woocommerce' ); ?></label></td>
++							<th scope="row"><label for="woocommerce-exporter-excel-view"><?php esc_html_e( 'Giới hạn ô Excel', 'woocommerce' ); ?></label></th>
++							<td><label><input type="checkbox" id="woocommerce-exporter-excel-view" checked> <?php esc_html_e( 'Giữ nguyên HTML và xuống dòng; chỉ cắt phần vượt 32.767 ký tự/ô. Bỏ chọn để xuất không giới hạn độ dài. CSV không lưu độ rộng cột.', 'woocommerce' ); ?></label></td>
 +						</tr>
  					</tbody>
  				</table>
@@ -755,10 +755,10 @@ index 296131b8..6c2e51cd 100644
  	}
  }
 diff --git a/wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php b/wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php
-index fa9a6e77..11ba48ee 100644
+index fa9a6e77..779c4fb1 100644
 --- a/wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php
 +++ b/wp-content/plugins/woocommerce/includes/export/class-wc-product-csv-exporter.php
-@@ -23,10 +23,52 @@ if ( ! class_exists( 'WC_CSV_Batch_Exporter', false ) ) {
+@@ -23,10 +23,57 @@ if ( ! class_exists( 'WC_CSV_Batch_Exporter', false ) ) {
  	include_once WC_ABSPATH . 'includes/export/abstract-wc-csv-batch-exporter.php';
  }
  
@@ -768,28 +768,33 @@ index fa9a6e77..11ba48ee 100644
   * WC_Product_CSV_Exporter Class.
   */
  class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
-+	/** @var bool Explicitly lossy display export; full exports remain import compatible. */
++	/** @var bool Limit cells to Excel's capacity while preserving their HTML content. */
 +	protected $excel_view = false;
 +
-+	/** Select single-line, shortened text for viewing in Excel. */
++	/** Select Excel cell limits without stripping HTML or line breaks. */
 +	public function set_excel_view( $enabled ) {
 +		$this->excel_view = (bool) $enabled;
 +	}
 +
-+	/** Format display cells before applying the existing formula protection. */
++	/** Preserve content and cap the final cell, including formula protection. */
 +	public function format_data( $data ) {
-+		if ( $this->excel_view && is_string( $data ) ) {
-+			$data = wp_check_invalid_utf8( $data, true );
-+			$data = preg_replace( '/<\s*br\s*\/?\s*>|<\/(?:p|div|li|tr|h[1-6])\s*>/iu', ' ', $data );
-+			$data = wp_strip_all_tags( $data );
-+			$data = html_entity_decode( $data, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-+			$data = trim( preg_replace( '/[\p{Z}\s\x00-\x1f\x7f]+/u', ' ', $data ) );
-+			// Leave one character for formula escaping. Cut at a Unicode character boundary.
-+			if ( mb_strlen( $data, 'UTF-8' ) > 119 ) {
-+				$data = mb_substr( $data, 0, 118, 'UTF-8' ) . '…';
-+			}
++		$data = parent::format_data( $data );
++		if ( ! $this->excel_view || ! is_string( $data ) ) {
++			return $data;
 +		}
-+		return parent::format_data( $data );
++		// Bound the temporary string before UTF-16 conversion. Excel's cell limit
++		// is 32,767 UTF-16 code units; supplementary characters consume two units.
++		$data  = mb_substr( $data, 0, 32767, 'UTF-8' );
++		$utf16 = mb_convert_encoding( $data, 'UTF-16LE', 'UTF-8' );
++		if ( strlen( $utf16 ) <= 65534 ) {
++			return $data;
++		}
++		$utf16 = substr( $utf16, 0, 65534 );
++		$last  = unpack( 'v', substr( $utf16, -2 ) )[1];
++		if ( 0xD800 <= $last && 0xDBFF >= $last ) {
++			$utf16 = substr( $utf16, 0, -2 );
++		}
++		return mb_convert_encoding( $utf16, 'UTF-8', 'UTF-16LE' );
 +	}
 +
 +	/** @var int|null Primary records processed, excluding expanded variations. */
@@ -811,7 +816,7 @@ index fa9a6e77..11ba48ee 100644
  
  	/**
  	 * Type of export used in filter names.
-@@ -229,7 +271,23 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -229,7 +276,23 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  	 * @since 3.1.0
  	 */
  	public function prepare_data_to_export() {
@@ -836,7 +841,7 @@ index fa9a6e77..11ba48ee 100644
  			'status'   => array( ProductStatus::PRIVATE, ProductStatus::PUBLISH, ProductStatus::DRAFT, ProductStatus::FUTURE, ProductStatus::PENDING ),
  			'limit'    => $this->get_limit(),
  			'page'     => $this->get_page(),
-@@ -258,16 +316,17 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -258,16 +321,17 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		 * @since 3.5.0
  		 * @param array $args Arguments to pass to wc_get_products().
  		 */
@@ -858,7 +863,7 @@ index fa9a6e77..11ba48ee 100644
  		if ( 1 < $this->get_page() ) {
  			$cached_total = get_transient( $total_cache_key );
  		}
-@@ -281,7 +340,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -281,7 +345,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		$cursor_compatible = isset( $args['orderby'] )
  			&& array( 'ID' => 'ASC' ) === $args['orderby']
  			&& empty( $args['offset'] );
@@ -867,7 +872,7 @@ index fa9a6e77..11ba48ee 100644
  			1 === $this->get_page()
  			|| ( $can_reuse_total && 0 < $cursor )
  		);
-@@ -291,7 +350,6 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -291,7 +355,6 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  				$args['wc_product_export_after_id'] = $cursor;
  			}
  		}
@@ -875,7 +880,7 @@ index fa9a6e77..11ba48ee 100644
  		$cursor_filter = null;
  		if ( $use_cursor && 0 < $cursor ) {
  			$cursor_filter = static function ( $where, $query ) use ( $cursor ) {
-@@ -305,7 +363,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -305,7 +368,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		}
  
  		try {
@@ -884,7 +889,7 @@ index fa9a6e77..11ba48ee 100644
  		} finally {
  			if ( $cursor_filter ) {
  				remove_filter( 'posts_where', $cursor_filter, 10 );
-@@ -323,6 +381,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -323,6 +386,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  				set_transient( $total_cache_key, $this->total_rows, max( HOUR_IN_SECONDS, $expiration ) );
  			}
  		}
@@ -894,7 +899,7 @@ index fa9a6e77..11ba48ee 100644
  		if ( $use_cursor && empty( $product_rows ) ) {
  			// The first count is only a progress estimate. If rows disappear while
  			// exporting, finish at the actual cursor boundary instead of looping on
-@@ -330,8 +391,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -330,8 +396,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  			$this->total_rows = $this->get_total_exported();
  		}
  
@@ -906,7 +911,7 @@ index fa9a6e77..11ba48ee 100644
  		$this->prime_export_batch_caches( $product_rows );
  		if ( $use_cursor && $product_rows ) {
  			$last_product = end( $product_rows );
-@@ -341,6 +403,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -341,6 +408,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		}
  
  		foreach ( $product_rows as $product ) {
@@ -914,7 +919,7 @@ index fa9a6e77..11ba48ee 100644
  			// Check if the product is variable and if either the include or category filter is active.
  			// This is to ensure that product variations are only included if they are being selectively exported or if they are part of a category.
  			if ( ( ! empty( $args['include'] ) || ! empty( $args['category'] ) ) &&
-@@ -355,14 +418,25 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -355,14 +423,25 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		// If variable products were identified (either through include or category filters), fetch their variations.
  		if ( ! empty( $variable_products ) ) {
  			foreach ( $variable_products as $parent_id ) {
@@ -945,7 +950,7 @@ index fa9a6e77..11ba48ee 100644
  
  				if ( ! $products ) {
  					continue;
-@@ -371,10 +445,16 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -371,10 +450,16 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  				$this->prime_export_batch_caches( $products );
  
  				foreach ( $products as $product ) {
@@ -962,7 +967,7 @@ index fa9a6e77..11ba48ee 100644
  	}
  
  	/**
-@@ -402,6 +482,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -402,6 +487,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  	 * @param WC_Product[] $products Products in the current export batch.
  	 */
  	protected function prime_export_batch_caches( $products ) {
@@ -970,7 +975,7 @@ index fa9a6e77..11ba48ee 100644
  		$attachment_ids = array();
  		$related_ids    = array();
  		$user_ids       = array();
-@@ -421,18 +502,23 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -421,18 +507,23 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  				}
  			}
  
@@ -1000,7 +1005,7 @@ index fa9a6e77..11ba48ee 100644
  				$related_meta_ids = $product->get_meta( $related_meta_key, true, 'edit' );
  				if ( is_array( $related_meta_ids ) ) {
  					array_walk_recursive(
-@@ -448,10 +534,10 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -448,10 +539,10 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  				}
  			}
  
@@ -1013,7 +1018,7 @@ index fa9a6e77..11ba48ee 100644
  			}
  		}
  
-@@ -460,11 +546,17 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -460,11 +551,17 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		$user_ids       = array_values( array_unique( array_filter( array_map( 'absint', $user_ids ) ) ) );
  
  		if ( $attachment_ids && function_exists( '_prime_post_caches' ) ) {
@@ -1033,7 +1038,7 @@ index fa9a6e77..11ba48ee 100644
  		}
  
  		if ( $user_ids && function_exists( 'cache_users' ) ) {
-@@ -485,6 +577,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -485,6 +582,7 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		}
  
  		if ( ! array_key_exists( $product_id, $this->export_product_cache ) ) {
@@ -1041,7 +1046,7 @@ index fa9a6e77..11ba48ee 100644
  			$this->export_product_cache[ $product_id ] = wc_get_product( $product_id );
  		}
  
-@@ -543,7 +636,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -543,7 +641,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  		 * @param WC_Product              $product     The product object corresponding to the current row.
  		 * @param WC_Product_CSV_Exporter $exporter    The instance of the CSV exporter.
  		 */
@@ -1052,7 +1057,7 @@ index fa9a6e77..11ba48ee 100644
  	}
  
  	/**
-@@ -875,6 +970,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
+@@ -875,6 +975,9 @@ class WC_Product_CSV_Exporter extends WC_CSV_Batch_Exporter {
  	 * @return string
  	 */
  	protected function filter_description_field( $description ) {
@@ -1062,6 +1067,233 @@ index fa9a6e77..11ba48ee 100644
  		$description = str_replace( '\n', "\\\\n", $description );
  		$description = str_replace( "\n", '\n', $description );
  		return $description;
+diff --git a/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-resources.php b/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-resources.php
+new file mode 100644
+index 00000000..5c63d165
+--- /dev/null
++++ b/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-resources.php
+@@ -0,0 +1,221 @@
++<?php
++/**
++ * Request-local resource guards shared by product export paths.
++ *
++ * @package WooCommerce\Export
++ */
++
++defined( 'ABSPATH' ) || exit;
++
++/** Fail before native CRUD hydration can materialize an oversized metadata batch. */
++final class WC_Product_Export_Resources {
++	/** @var int Conservative retry size measured by the last failed preflight. */
++	private static $suggested_batch = 1;
++
++	public static function suggested_batch() {
++		return self::$suggested_batch;
++	}
++
++	/** Reserve room for encoding, escaping and CSV buffers before copying a row. */
++	public static function check_row( $row ) {
++		if ( ! is_array( $row ) ) {
++			throw new RuntimeException( 'A product export row hook did not return a row.' );
++		}
++		$bytes = 0;
++		foreach ( $row as $value ) {
++			$bytes += is_string( $value ) ? strlen( $value ) : 32;
++		}
++		self::check_memory( $bytes * 4, 1 );
++		return $bytes;
++	}
++	/** One PHP-streamed download per storage directory, without blocking workers. */
++	public static function download_lock( $directory ) {
++		$path = trailingslashit( $directory ) . '.wc-product-export-download.lock';
++		if ( is_link( $path ) ) {
++			throw new RuntimeException( 'The CSV download lock path is unsafe.' );
++		}
++		$stream = self::io(
++			static function () use ( $path ) {
++				return fopen( $path, 'c+b' );
++			}
++		);
++		if ( ! $stream ) {
++			throw new RuntimeException( 'The CSV download lock could not be opened.' );
++		}
++		if ( ! flock( $stream, LOCK_EX | LOCK_NB ) ) {
++			fclose( $stream );
++			return null;
++		}
++		return $stream;
++	}
++
++	/** A ceiling independent of an excessively large hosting memory_limit. */
++	public static function ceiling() {
++		$limit = wp_convert_hr_to_bytes( ini_get( 'memory_limit' ) );
++		return $limit > 0 ? min( 256 * MB_IN_BYTES, (int) ( $limit * 0.70 ) ) : 256 * MB_IN_BYTES;
++	}
++
++	public static function check_memory( $additional = 0, $records = 0 ) {
++		if ( memory_get_usage( true ) + max( 0, $additional ) >= self::ceiling() ) {
++			$available             = max( 0, self::ceiling() - memory_get_usage( true ) );
++			self::$suggested_batch = $additional > 0 && $records > 0 ? max( 1, (int) floor( $records * $available / $additional * 0.75 ) ) : 1;
++			throw new RuntimeException( 'Product export stopped before exceeding its memory budget. Use a smaller background export batch.' );
++		}
++	}
++
++	/**
++	 * Check raw metadata sizes using a scalar aggregate, before cache/CRUD copies.
++	 * The estimate includes per-meta overhead and parent data of variations.
++	 * It is deliberately conservative, not a guarantee about extension allocations.
++	 *
++	 * @param int[] $ids Bounded IDs selected for hydration.
++	 */
++	public static function check_ids( array $ids ) {
++		global $wpdb;
++		self::check_memory();
++		$ids = array_values( array_unique( array_filter( array_map( 'absint', $ids ) ) ) );
++		if ( ! $ids ) {
++			return;
++		}
++		if ( count( $ids ) > 500 ) {
++			throw new RuntimeException( 'Product export related-data batch exceeds its safe limit.' );
++		}
++		$source_count = count( $ids );
++		$posts        = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_parent FROM {$wpdb->posts} WHERE ID IN (" . implode( ',', array_fill( 0, count( $ids ), '%d' ) ) . ')', $ids ) );
++		if ( $wpdb->last_error ) {
++			throw new RuntimeException( 'The product export resource check could not read the database.' );
++		}
++		$bytes = 0;
++		foreach ( $posts as $post ) {
++			if ( $post->post_parent ) {
++				$ids[] = (int) $post->post_parent;
++			}
++		}
++		$ids = array_values( array_unique( $ids ) );
++		foreach ( array_chunk( $ids, 100 ) as $group ) {
++			$post_size = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(OCTET_LENGTH(post_content) + OCTET_LENGTH(post_excerpt) + OCTET_LENGTH(post_title) + 256), 0) FROM {$wpdb->posts} WHERE ID IN (" . implode( ',', array_fill( 0, count( $group ), '%d' ) ) . ')', $group ) );
++			if ( $wpdb->last_error ) {
++				throw new RuntimeException( 'The product export resource check could not read the database.' );
++			}
++			$bytes += (int) $post_size;
++			self::check_memory( $bytes * 8, min( $source_count, count( $group ) ) );
++			$size = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(COALESCE(OCTET_LENGTH(meta_value), 0) + COALESCE(OCTET_LENGTH(meta_key), 0) + 256), 0) FROM {$wpdb->postmeta} WHERE post_id IN (" . implode( ',', array_fill( 0, count( $group ), '%d' ) ) . ')', $group ) );
++			if ( $wpdb->last_error ) {
++				throw new RuntimeException( 'The product export resource check could not read the database.' );
++			}
++			$bytes += (int) $size;
++			self::check_memory( $bytes * 8, min( $source_count, count( $group ) ) );
++			// Term objects/descriptions can exhaust the same object cache as meta.
++			$terms = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(OCTET_LENGTH(tt.description) + OCTET_LENGTH(t.name) + OCTET_LENGTH(t.slug) + 512), 0) FROM {$wpdb->term_relationships} tr INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id INNER JOIN {$wpdb->terms} t ON t.term_id = tt.term_id WHERE tr.object_id IN (" . implode( ',', array_fill( 0, count( $group ), '%d' ) ) . ')', $group ) );
++			if ( $wpdb->last_error ) {
++				throw new RuntimeException( 'The product export resource check could not read the database.' );
++			}
++			$bytes += (int) $terms;
++			self::check_memory( $bytes * 8, min( $source_count, count( $group ) ) );
++		}
++	}
++
++	/** Preflight IDs and sizes before SELECT posts.* can allocate large descriptions. */
++	public static function preflight( $request, $query, $marker, $limit, $key = 'wc_safe_export_query' ) {
++		global $wpdb;
++		if ( $marker !== $query->get( $key ) ) {
++			return $request;
++		}
++		$pattern    = '/^SELECT\s+((?:SQL_CALC_FOUND_ROWS\s+)?(?:DISTINCT\s+)?)' . preg_quote( $wpdb->posts, '/' ) . '\.\*(?=\s+FROM\b)/i';
++		$id_request = preg_replace_callback(
++			$pattern,
++			static function ( $matches ) use ( $wpdb ) {
++				return 'SELECT ' . $matches[1] . $wpdb->posts . '.ID';
++			},
++			$request,
++			1,
++			$changed
++		);
++		if ( ! $changed || ! preg_match( '/\bLIMIT\s+(?:[0-9]+\s*,\s*)?([0-9]+)\s*$/i', $request, $match ) || (int) $match[1] > $limit || (int) $match[1] < 1 ) {
++			throw new RuntimeException( 'The product query cannot be preflighted within safe resource limits. Review query filters before exporting.' );
++		}
++		$ids = $wpdb->get_col( $id_request ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Native WP_Query SQL; only the SELECT projection is replaced.
++		if ( $wpdb->last_error ) {
++			throw new RuntimeException( 'The product export resource check could not read the database.' );
++		}
++		if ( false !== stripos( $request, 'SQL_CALC_FOUND_ROWS' ) ) {
++			$total = $wpdb->get_var( 'SELECT FOUND_ROWS()' );
++			if ( $wpdb->last_error ) {
++				throw new RuntimeException( 'The product export resource check could not read the database.' );
++			}
++			$query->set( 'wc_safe_export_found_rows', (int) $total );
++		}
++		self::check_ids( $ids );
++		$query->set( 'wc_safe_export_selected_ids', array_map( 'intval', $ids ) );
++		if ( ! $ids ) {
++			return "SELECT {$wpdb->posts}.* FROM {$wpdb->posts} WHERE 1=0";
++		}
++		// Reuse the exact ordered page selected by the original filtered query.
++		// Hydration must not repeat its expensive joins or OFFSET scan.
++		return $wpdb->prepare( "SELECT {$wpdb->posts}.* FROM {$wpdb->posts} WHERE ID IN (" . implode( ',', array_fill( 0, count( $ids ), '%d' ) ) . ') ORDER BY FIELD(ID, ' . implode( ',', array_fill( 0, count( $ids ), '%d' ) ) . ')', array_merge( $ids, $ids ) );
++	}
++
++	/** Preserve native totals before the resource checks issue additional queries. */
++	public static function found_rows_query( $sql, $query, $marker, $key = 'wc_safe_export_query' ) {
++		if ( $marker === $query->get( $key ) && 'SELECT FOUND_ROWS()' === $sql && null !== $query->get( 'wc_safe_export_found_rows', null ) ) {
++			return 'SELECT ' . (int) $query->get( 'wc_safe_export_found_rows' );
++		}
++		return $sql;
++	}
++
++	/** A bounded WooCommerce query with a guard before native metadata priming. */
++	public static function query( array $args ) {
++		global $wpdb;
++		self::check_memory();
++		$marker                       = wp_generate_uuid4();
++		$args['wc_safe_export_query'] = $marker;
++		$guard                        = static function ( $posts, $query ) use ( $marker, $args ) {
++			if ( $marker === $query->get( 'wc_safe_export_query' ) ) {
++				if ( count( $posts ) > $args['limit'] ) {
++					throw new RuntimeException( 'A product export query exceeded its bounded batch size.' );
++				}
++				self::check_ids( wp_list_pluck( $posts, 'ID' ) );
++			}
++			return $posts;
++		};
++		$preflight                    = static function ( $request, $query ) use ( $marker, $args ) {
++			return self::preflight( $request, $query, $marker, $args['limit'] );
++		};
++		add_filter( 'posts_request', $preflight, PHP_INT_MAX, 2 );
++		$found = static function ( $sql, $query ) use ( $marker ) {
++			return self::found_rows_query( $sql, $query, $marker );
++		};
++		$split = static function ( $value, $query ) use ( $marker ) {
++			return $marker === $query->get( 'wc_safe_export_query' ) ? false : $value;
++		};
++		add_filter( 'found_posts_query', $found, PHP_INT_MAX, 2 );
++		add_filter( 'split_the_query', $split, PHP_INT_MAX, 2 );
++		add_filter( 'posts_results', $guard, PHP_INT_MIN, 2 );
++		try {
++			$products = wc_get_products( $args );
++			if ( $wpdb->last_error ) {
++				throw new RuntimeException( 'The product export resource check could not read the database.' );
++			}
++			return $products;
++		} finally {
++			remove_filter( 'posts_request', $preflight, PHP_INT_MAX );
++			remove_filter( 'found_posts_query', $found, PHP_INT_MAX );
++			remove_filter( 'split_the_query', $split, PHP_INT_MAX );
++			remove_filter( 'posts_results', $guard, PHP_INT_MIN );
++		}
++	}
++
++	/** Convert I/O warnings to a path-free error and preserve the caller's handler. */
++	public static function io( callable $operation ) {
++		set_error_handler(
++			static function () {
++				throw new RuntimeException( 'The CSV filesystem operation failed. Check storage permissions and free space.' );
++			}
++		);
++		try {
++			return $operation();
++		} finally {
++			restore_error_handler();
++		}
++	}
++}
 diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-bootstrap.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-bootstrap.php
 new file mode 100644
 index 00000000..7a5f9095
@@ -1106,7 +1338,7 @@ index 00000000..7a5f9095
 +}
 diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-command.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-command.php
 new file mode 100644
-index 00000000..68a5b257
+index 00000000..2add8540
 --- /dev/null
 +++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-command.php
 @@ -0,0 +1,450 @@
@@ -1206,7 +1438,7 @@ index 00000000..68a5b257
 +	 * : Add a UTF-8 BOM to the CSV output.
 +	 *
 +	 * [--excel-view]
-+	 * : Remove HTML and line breaks; shorten cells to 120 characters. Lossy; forces BOM and formula protection.
++	 * : Preserve HTML and line breaks; cap cells at Excel's 32,767 UTF-16 units. Forces BOM and formula protection.
 +	 *
 +	 * [--no-bom]
 +	 * : Omit the UTF-8 BOM.
@@ -1562,10 +1794,10 @@ index 00000000..68a5b257
 +}
 diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php
 new file mode 100644
-index 00000000..cbf9f7dd
+index 00000000..3ead4703
 --- /dev/null
 +++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-engine.php
-@@ -0,0 +1,474 @@
+@@ -0,0 +1,498 @@
 +<?php
 +/**
 + * Bounded export worker and immutable job configuration.
@@ -1616,20 +1848,21 @@ index 00000000..cbf9f7dd
 +		}
 +
 +		$config = array(
-+			'version'     => 1,
-+			'mode'        => $options['mode'] ?? 'compatibility',
-+			'format'      => $options['format'] ?? 'csv',
-+			'columns'     => self::strings( $options['columns'] ?? array(), 1000 ),
-+			'types'       => self::strings( $options['types'] ?? array(), 100 ),
-+			'categories'  => array_map( 'sanitize_title_with_dashes', self::strings( $options['categories'] ?? array(), 500 ) ),
-+			'ids'         => array(),
-+			'statuses'    => self::strings( $options['statuses'] ?? array(), count( self::STATUSES ) ),
-+			'meta'        => ! empty( $options['meta'] ),
-+			'bom'         => ! isset( $options['bom'] ) || (bool) $options['bom'],
-+			'spreadsheet' => ! isset( $options['spreadsheet'] ) || (bool) $options['spreadsheet'],
-+			'excel_view'  => ! empty( $options['excel_view'] ),
-+			'estimate'    => ! isset( $options['estimate'] ) || (bool) $options['estimate'],
-+			'consistency' => 'live',
++			'version'            => 1,
++			'mode'               => $options['mode'] ?? 'compatibility',
++			'format'             => $options['format'] ?? 'csv',
++			'columns'            => self::strings( $options['columns'] ?? array(), 1000 ),
++			'types'              => self::strings( $options['types'] ?? array(), 100 ),
++			'categories'         => array_map( 'sanitize_title_with_dashes', self::strings( $options['categories'] ?? array(), 500 ) ),
++			'ids'                => array(),
++			'statuses'           => self::strings( $options['statuses'] ?? array(), count( self::STATUSES ) ),
++			'meta'               => ! empty( $options['meta'] ),
++			'bom'                => ! isset( $options['bom'] ) || (bool) $options['bom'],
++			'spreadsheet'        => ! isset( $options['spreadsheet'] ) || (bool) $options['spreadsheet'],
++			'excel_view'         => ! empty( $options['excel_view'] ),
++			'excel_cell_version' => 2,
++			'estimate'           => ! isset( $options['estimate'] ) || (bool) $options['estimate'],
++			'consistency'        => 'live',
 +		);
 +		if ( $config['excel_view'] ) {
 +			$config['bom']         = true;
@@ -1762,7 +1995,17 @@ index 00000000..cbf9f7dd
 +			}
 +			$message = get_class( $error ) === RuntimeException::class && in_array( $error->getMessage(), self::public_errors(), true )
 +				? $error->getMessage() : 'A worker unit failed. Check private storage and database availability, then review export compatibility.';
-+			$this->store->failure( $job, $message );
++			if ( 'This export used the old shortened Excel format. Start a new export to preserve full HTML.' === $message ) {
++				$this->store->save(
++					$job,
++					array(
++						'status'     => 'failed',
++						'last_error' => $message,
++					)
++				);
++			} else {
++				$this->store->failure( $job, $message );
++			}
 +			if ( wp_cache_supports( 'flush_runtime' ) ) {
 +				wp_cache_flush_runtime();
 +			}
@@ -1785,6 +2028,7 @@ index 00000000..cbf9f7dd
 +	private static function public_errors(): array {
 +		return array(
 +			'Product export stopped before exceeding its memory budget. Use a smaller background export batch.',
++			'This export used the old shortened Excel format. Start a new export to preserve full HTML.',
 +			'Product export related-data batch exceeds its safe limit.',
 +			'The product export resource check could not read the database.',
 +			'The product query cannot be preflighted within safe resource limits. Review query filters before exporting.',
@@ -1799,6 +2043,7 @@ index 00000000..cbf9f7dd
 +			'The product database query failed.',
 +			'A product query override does not support bounded background export. Use the legacy exporter.',
 +			'The product query returned unexpected IDs. Use the compatibility mode or legacy exporter.',
++			'The product query did not hydrate every selected product. The export was stopped to prevent missing rows.',
 +			'The export exceeded the supported number of CSV columns.',
 +			'No CSV columns are selected for this export.',
 +			'The export schema has changed. Start a new export.',
@@ -1834,6 +2079,9 @@ index 00000000..cbf9f7dd
 +		}
 +		if ( 1 !== ( $config['version'] ?? null ) ) {
 +			throw new RuntimeException( 'The export schema has changed. Start a new export.' );
++		}
++		if ( ! empty( $config['excel_view'] ) && 2 !== ( $config['excel_cell_version'] ?? null ) ) {
++			throw new RuntimeException( 'This export used the old shortened Excel format. Start a new export to preserve full HTML.' );
 +		}
 +		if ( 'finalizing' === $job['status'] ) {
 +			$state = $this->files->finalize( $id, $state, $config );
@@ -1963,7 +2211,13 @@ index 00000000..cbf9f7dd
 +				$state['batch'] = min( 100, $config['batch_max'], $state['resource_batch_max'] ?? $config['batch_max'], max( $batch + 1, (int) ( $batch * 1.2 ) ) );
 +			}
 +		}
-+		$this->store->save( $job, array( 'checkpoint' => $state ) );
++		$this->store->save(
++			$job,
++			array(
++				'checkpoint' => $state,
++				'last_error' => '',
++			)
++		);
 +	}
 +
 +	public function sweep(): void {
@@ -1997,10 +2251,12 @@ index 00000000..cbf9f7dd
 +	}
 +
 +	public static function summary( array $job ): array {
-+		$state    = $job['checkpoint'];
-+		$rate     = $state['rate'] ?? 0;
-+		$rows     = $state['rows'] ?? 0;
-+		$total    = $state['estimate'] ?? null;
++		$state = $job['checkpoint'];
++		$rate  = $state['rate'] ?? 0;
++		$rows  = $state['rows'] ?? 0;
++		// Old checkpoints estimated every posts-table row, including media/revisions.
++		// Do not display those values as selected product counts or derive an ETA from them.
++		$total    = null;
 +		$progress = $total ? min( 99, (int) floor( 100 * $rows / $total ) ) : null;
 +		$samples  = $state['unit_samples'] ?? array();
 +		sort( $samples, SORT_NUMERIC );
@@ -2035,7 +2291,7 @@ index 00000000..cbf9f7dd
 +			'max_unit_seconds'            => round( $state['unit_max_seconds'] ?? 0, 3 ),
 +			'checksum'                    => $artifact['checksum'] ?? null,
 +			'attempts'                    => $job['attempts'],
-+			'last_error'                  => $job['last_error'],
++			'last_error'                  => 'completed' === $job['status'] ? '' : $job['last_error'],
 +			'logs'                        => $job['logs'] ?? array(),
 +		);
 +	}
@@ -2881,10 +3137,10 @@ index 00000000..32dae1d7
 +}
 diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php
 new file mode 100644
-index 00000000..446683f3
+index 00000000..9739d3f2
 --- /dev/null
 +++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-integration.php
-@@ -0,0 +1,544 @@
+@@ -0,0 +1,546 @@
 +<?php
 +/**
 + * Admin UI, background queue, and protected download integration.
@@ -3362,8 +3618,10 @@ index 00000000..446683f3
 +	public static function summary( array $job ): array {
 +		$data                  = Engine::summary( $job );
 +		$data['control_nonce'] = wp_create_nonce( 'woocommerce-large-export-' . $job['id'] );
-+		$data['download_url']  = 'completed' === $job['status']
-+			? wp_nonce_url( admin_url( 'admin-post.php?action=woocommerce_large_export_download&job_id=' . rawurlencode( $job['id'] ) ), 'woocommerce-large-export-download-' . $job['id'] )
++		// JSON URLs are assigned with jQuery.attr(). wp_nonce_url() HTML-escapes
++		// ampersands, making job_id/_wpnonce unreadable by the download endpoint.
++		$data['download_url'] = 'completed' === $job['status']
++			? add_query_arg( '_wpnonce', wp_create_nonce( 'woocommerce-large-export-download-' . $job['id'] ), admin_url( 'admin-post.php?action=woocommerce_large_export_download&job_id=' . rawurlencode( $job['id'] ) ) )
 +			: '';
 +		return $data;
 +	}
@@ -3431,10 +3689,10 @@ index 00000000..446683f3
 +}
 diff --git a/wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php b/wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php
 new file mode 100644
-index 00000000..ae251f45
+index 00000000..5cdf6319
 --- /dev/null
 +++ b/wp-content/plugins/woocommerce/includes/export/large-export/class-reader.php
-@@ -0,0 +1,483 @@
+@@ -0,0 +1,481 @@
 +<?php
 +/**
 + * Bounded product selection and row transformation for background exports.
@@ -3523,18 +3781,8 @@ index 00000000..ae251f45
 +			'mode'        => $cpt ? $config['mode'] : 'compatibility',
 +			'cpt'         => $cpt,
 +		);
-+		if ( $cpt ) {
-+			// A cheap upper bound for the default catalog selection. Filtered totals may be unknown.
-+			if ( $config['estimate'] && Engine::STATUSES === $config['statuses'] &&
-+				! $config['ids'] && ! $config['categories'] && array_keys( \WC_Admin_Exporters::get_product_types() ) === $config['types'] &&
-+				! has_filter( 'woocommerce_product_export_product_query_args' ) && ! has_filter( 'woocommerce_product_object_query_args' ) &&
-+				! has_filter( 'woocommerce_product_object_query' ) && ! has_filter( 'woocommerce_product_data_store_cpt_get_products_query' ) ) {
-+				$estimate = $wpdb->get_var( $wpdb->prepare( 'SELECT SUM(TABLE_ROWS) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $wpdb->posts ) );
-+				if ( ! $wpdb->last_error && (int) $estimate > 0 ) {
-+					$state['estimate'] = (int) $estimate;
-+				}
-+			}
-+		}
++		// TABLE_ROWS counts attachments, revisions and other post types too.
++		// Keep totals unknown rather than presenting the entire posts table as products.
 +		return $state;
 +	}
 +
@@ -3770,8 +4018,13 @@ index 00000000..ae251f45
 +				add_filter( 'split_the_query', $split, PHP_INT_MAX, 2 );
 +			}
 +		}
-+		$preflight = static function ( $request, $query ) use ( $marker, $args ) {
-+			return \WC_Product_Export_Resources::preflight( $request, $query, $marker, $args['limit'], 'wc_large_export_query' );
++		$selected_ids = null;
++		$preflight    = static function ( $request, $query ) use ( $marker, $args, &$selected_ids ) {
++			$request = \WC_Product_Export_Resources::preflight( $request, $query, $marker, $args['limit'], 'wc_large_export_query' );
++			if ( $marker === $query->get( 'wc_large_export_query' ) ) {
++				$selected_ids = $query->get( 'wc_safe_export_selected_ids' );
++			}
++			return $request;
 +		};
 +		add_filter( 'posts_request', $preflight, PHP_INT_MAX, 2 );
 +		$found = static function ( $sql, $query ) use ( $marker ) {
@@ -3812,6 +4065,9 @@ index 00000000..ae251f45
 +		}
 +		if ( $prime_meta && ! $meta_primed && $products ) {
 +			self::prime_crud_metadata( $products );
++		}
++		if ( $bounded_cpt && array_keys( $ids ) !== $selected_ids ) {
++			throw new RuntimeException( 'The product query did not hydrate every selected product. The export was stopped to prevent missing rows.' );
 +		}
 +		return $products;
 +	}
@@ -4559,256 +4815,36 @@ index ca148944..34308e1a 100644
  if ( class_exists( \Automattic\Jetpack\Connection\Rest_Authentication::class ) ) {
  	\Automattic\Jetpack\Connection\Rest_Authentication::init();
 diff --git a/wp-content/themes/flatsome-child/paths/product-import-export-tools.php b/wp-content/themes/flatsome-child/paths/product-import-export-tools.php
-index 645d33fb..f33d4bfa 100644
+index 645d33fb..045a26b3 100644
 --- a/wp-content/themes/flatsome-child/paths/product-import-export-tools.php
 +++ b/wp-content/themes/flatsome-child/paths/product-import-export-tools.php
-@@ -1549,6 +1549,7 @@ function hpt_pie_load_wc_exporter() {
+@@ -1547,8 +1547,12 @@ function hpt_pie_load_wc_exporter() {
+ }
+ 
  function hpt_pie_make_exporter($config) {
++    if (!empty($config['excel_view']) && 2 !== ($config['excel_cell_version'] ?? null)) {
++        throw new RuntimeException('Lần xuất này dùng định dạng Excel cũ đã cắt nội dung. Hãy tạo lần xuất mới để giữ nguyên HTML.');
++    }
      $exporter = new WC_Product_CSV_Exporter();
      $exporter->set_limit(hpt_pie_export_batch_size());
 +    $exporter->set_excel_view(!empty($config['excel_view']));
  
      if (!empty($config['filename'])) {
          $exporter->set_filename($config['filename']);
-@@ -1592,6 +1593,7 @@ function hpt_pie_ajax_export_init() {
+@@ -1592,6 +1596,8 @@ function hpt_pie_ajax_export_init() {
          'filename'     => $filename,
          'category_ids' => array_values($category_ids),
          'gzip'         => $gzip ? 1 : 0,
 +        'excel_view'   => !empty($_POST['excel_view']),
++        'excel_cell_version' => 2,
      );
  
      $job_id = hpt_pie_create_job(array(
-@@ -2493,6 +2495,7 @@ function hpt_pie_render_page() {
+@@ -2493,6 +2499,7 @@ function hpt_pie_render_page() {
                              </select><small>Không chọn = xuất toàn bộ sản phẩm. CSV luôn có ID, SKU, slug và URL.</small></label>
                      <fieldset class="hpt-pie-field"><legend>Định dạng tải</legend><label><input type="checkbox" name="gzip" value="1"> <strong>Nén .gz</strong><small>Khuyến nghị với file rất lớn.</small></label><div class="hpt-pie-columns"><span class="hpt-pie-chip">Slug</span><span class="hpt-pie-chip">URL sản phẩm</span><span class="hpt-pie-chip">Dữ liệu WooCommerce</span></div></fieldset>
                  </div>
-+                <label class="hpt-pie-checkline"><input type="checkbox" name="excel_view" value="1" checked> Bản xem Excel: bỏ HTML, gộp xuống dòng, cắt tối đa 120 ký tự/ô. Bỏ chọn để xuất đầy đủ khi nhập lại. CSV không lưu độ rộng cột.</label>
++                <label class="hpt-pie-checkline"><input type="checkbox" name="excel_view" value="1" checked> Giữ nguyên HTML và xuống dòng, chỉ cắt phần vượt giới hạn Excel 32.767 ký tự/ô. Bỏ chọn để xuất không giới hạn độ dài. CSV không lưu độ rộng cột.</label>
                  <button class="button button-primary hpt-pie-primary" type="submit"><span class="dashicons dashicons-download"></span> Bắt đầu xuất</button>
              </form>
              <div id="hpt-pie-export-progress" class="hpt-pie-progress" style="display:none;"><strong class="hpt-pie-title">Đang xuất...</strong><div class="hpt-pie-track"><div class="hpt-pie-fill" style="width:0;"></div></div><div class="hpt-pie-meta"></div><p class="hpt-pie-actions"><button type="button" class="button hpt-pie-pause" data-type="export">Tạm dừng</button><button type="button" class="button hpt-pie-resume" data-type="export" style="display:none;">Tiếp tục</button><button type="button" class="button hpt-pie-cancel" data-type="export">Hủy</button><a class="button button-primary hpt-pie-download" style="display:none;" href="#"><span class="dashicons dashicons-download"></span> Tải file</a></p>
-diff --git a/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-resources.php b/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-resources.php
-new file mode 100644
-index 00000000..1c32c945
---- /dev/null
-+++ b/wp-content/plugins/woocommerce/includes/export/class-wc-product-export-resources.php
-@@ -0,0 +1,220 @@
-+<?php
-+/**
-+ * Request-local resource guards shared by product export paths.
-+ *
-+ * @package WooCommerce\Export
-+ */
-+
-+defined( 'ABSPATH' ) || exit;
-+
-+/** Fail before native CRUD hydration can materialize an oversized metadata batch. */
-+final class WC_Product_Export_Resources {
-+	/** @var int Conservative retry size measured by the last failed preflight. */
-+	private static $suggested_batch = 1;
-+
-+	public static function suggested_batch() {
-+		return self::$suggested_batch;
-+	}
-+
-+	/** Reserve room for encoding, escaping and CSV buffers before copying a row. */
-+	public static function check_row( $row ) {
-+		if ( ! is_array( $row ) ) {
-+			throw new RuntimeException( 'A product export row hook did not return a row.' );
-+		}
-+		$bytes = 0;
-+		foreach ( $row as $value ) {
-+			$bytes += is_string( $value ) ? strlen( $value ) : 32;
-+		}
-+		self::check_memory( $bytes * 4, 1 );
-+		return $bytes;
-+	}
-+	/** One PHP-streamed download per storage directory, without blocking workers. */
-+	public static function download_lock( $directory ) {
-+		$path = trailingslashit( $directory ) . '.wc-product-export-download.lock';
-+		if ( is_link( $path ) ) {
-+			throw new RuntimeException( 'The CSV download lock path is unsafe.' );
-+		}
-+		$stream = self::io(
-+			static function () use ( $path ) {
-+				return fopen( $path, 'c+b' );
-+			}
-+		);
-+		if ( ! $stream ) {
-+			throw new RuntimeException( 'The CSV download lock could not be opened.' );
-+		}
-+		if ( ! flock( $stream, LOCK_EX | LOCK_NB ) ) {
-+			fclose( $stream );
-+			return null;
-+		}
-+		return $stream;
-+	}
-+
-+	/** A ceiling independent of an excessively large hosting memory_limit. */
-+	public static function ceiling() {
-+		$limit = wp_convert_hr_to_bytes( ini_get( 'memory_limit' ) );
-+		return $limit > 0 ? min( 256 * MB_IN_BYTES, (int) ( $limit * 0.70 ) ) : 256 * MB_IN_BYTES;
-+	}
-+
-+	public static function check_memory( $additional = 0, $records = 0 ) {
-+		if ( memory_get_usage( true ) + max( 0, $additional ) >= self::ceiling() ) {
-+			$available             = max( 0, self::ceiling() - memory_get_usage( true ) );
-+			self::$suggested_batch = $additional > 0 && $records > 0 ? max( 1, (int) floor( $records * $available / $additional * 0.75 ) ) : 1;
-+			throw new RuntimeException( 'Product export stopped before exceeding its memory budget. Use a smaller background export batch.' );
-+		}
-+	}
-+
-+	/**
-+	 * Check raw metadata sizes using a scalar aggregate, before cache/CRUD copies.
-+	 * The estimate includes per-meta overhead and parent data of variations.
-+	 * It is deliberately conservative, not a guarantee about extension allocations.
-+	 *
-+	 * @param int[] $ids Bounded IDs selected for hydration.
-+	 */
-+	public static function check_ids( array $ids ) {
-+		global $wpdb;
-+		self::check_memory();
-+		$ids = array_values( array_unique( array_filter( array_map( 'absint', $ids ) ) ) );
-+		if ( ! $ids ) {
-+			return;
-+		}
-+		if ( count( $ids ) > 500 ) {
-+			throw new RuntimeException( 'Product export related-data batch exceeds its safe limit.' );
-+		}
-+		$source_count = count( $ids );
-+		$posts        = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_parent FROM {$wpdb->posts} WHERE ID IN (" . implode( ',', array_fill( 0, count( $ids ), '%d' ) ) . ')', $ids ) );
-+		if ( $wpdb->last_error ) {
-+			throw new RuntimeException( 'The product export resource check could not read the database.' );
-+		}
-+		$bytes = 0;
-+		foreach ( $posts as $post ) {
-+			if ( $post->post_parent ) {
-+				$ids[] = (int) $post->post_parent;
-+			}
-+		}
-+		$ids = array_values( array_unique( $ids ) );
-+		foreach ( array_chunk( $ids, 100 ) as $group ) {
-+			$post_size = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(OCTET_LENGTH(post_content) + OCTET_LENGTH(post_excerpt) + OCTET_LENGTH(post_title) + 256), 0) FROM {$wpdb->posts} WHERE ID IN (" . implode( ',', array_fill( 0, count( $group ), '%d' ) ) . ')', $group ) );
-+			if ( $wpdb->last_error ) {
-+				throw new RuntimeException( 'The product export resource check could not read the database.' );
-+			}
-+			$bytes += (int) $post_size;
-+			self::check_memory( $bytes * 8, min( $source_count, count( $group ) ) );
-+			$size = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(COALESCE(OCTET_LENGTH(meta_value), 0) + COALESCE(OCTET_LENGTH(meta_key), 0) + 256), 0) FROM {$wpdb->postmeta} WHERE post_id IN (" . implode( ',', array_fill( 0, count( $group ), '%d' ) ) . ')', $group ) );
-+			if ( $wpdb->last_error ) {
-+				throw new RuntimeException( 'The product export resource check could not read the database.' );
-+			}
-+			$bytes += (int) $size;
-+			self::check_memory( $bytes * 8, min( $source_count, count( $group ) ) );
-+			// Term objects/descriptions can exhaust the same object cache as meta.
-+			$terms = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(OCTET_LENGTH(tt.description) + OCTET_LENGTH(t.name) + OCTET_LENGTH(t.slug) + 512), 0) FROM {$wpdb->term_relationships} tr INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id INNER JOIN {$wpdb->terms} t ON t.term_id = tt.term_id WHERE tr.object_id IN (" . implode( ',', array_fill( 0, count( $group ), '%d' ) ) . ')', $group ) );
-+			if ( $wpdb->last_error ) {
-+				throw new RuntimeException( 'The product export resource check could not read the database.' );
-+			}
-+			$bytes += (int) $terms;
-+			self::check_memory( $bytes * 8, min( $source_count, count( $group ) ) );
-+		}
-+	}
-+
-+	/** Preflight IDs and sizes before SELECT posts.* can allocate large descriptions. */
-+	public static function preflight( $request, $query, $marker, $limit, $key = 'wc_safe_export_query' ) {
-+		global $wpdb;
-+		if ( $marker !== $query->get( $key ) ) {
-+			return $request;
-+		}
-+		$pattern    = '/^SELECT\s+((?:SQL_CALC_FOUND_ROWS\s+)?(?:DISTINCT\s+)?)' . preg_quote( $wpdb->posts, '/' ) . '\.\*(?=\s+FROM\b)/i';
-+		$id_request = preg_replace_callback(
-+			$pattern,
-+			static function ( $matches ) use ( $wpdb ) {
-+				return 'SELECT ' . $matches[1] . $wpdb->posts . '.ID';
-+			},
-+			$request,
-+			1,
-+			$changed
-+		);
-+		if ( ! $changed || ! preg_match( '/\bLIMIT\s+(?:[0-9]+\s*,\s*)?([0-9]+)\s*$/i', $request, $match ) || (int) $match[1] > $limit || (int) $match[1] < 1 ) {
-+			throw new RuntimeException( 'The product query cannot be preflighted within safe resource limits. Review query filters before exporting.' );
-+		}
-+		$ids = $wpdb->get_col( $id_request ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Native WP_Query SQL; only the SELECT projection is replaced.
-+		if ( $wpdb->last_error ) {
-+			throw new RuntimeException( 'The product export resource check could not read the database.' );
-+		}
-+		if ( false !== stripos( $request, 'SQL_CALC_FOUND_ROWS' ) ) {
-+			$total = $wpdb->get_var( 'SELECT FOUND_ROWS()' );
-+			if ( $wpdb->last_error ) {
-+				throw new RuntimeException( 'The product export resource check could not read the database.' );
-+			}
-+			$query->set( 'wc_safe_export_found_rows', (int) $total );
-+		}
-+		self::check_ids( $ids );
-+		if ( ! $ids ) {
-+			return "SELECT {$wpdb->posts}.* FROM {$wpdb->posts} WHERE 1=0";
-+		}
-+		// Reuse the exact ordered page selected by the original filtered query.
-+		// Hydration must not repeat its expensive joins or OFFSET scan.
-+		return $wpdb->prepare( "SELECT {$wpdb->posts}.* FROM {$wpdb->posts} WHERE ID IN (" . implode( ',', array_fill( 0, count( $ids ), '%d' ) ) . ') ORDER BY FIELD(ID, ' . implode( ',', array_fill( 0, count( $ids ), '%d' ) ) . ')', array_merge( $ids, $ids ) );
-+	}
-+
-+	/** Preserve native totals before the resource checks issue additional queries. */
-+	public static function found_rows_query( $sql, $query, $marker, $key = 'wc_safe_export_query' ) {
-+		if ( $marker === $query->get( $key ) && 'SELECT FOUND_ROWS()' === $sql && null !== $query->get( 'wc_safe_export_found_rows', null ) ) {
-+			return 'SELECT ' . (int) $query->get( 'wc_safe_export_found_rows' );
-+		}
-+		return $sql;
-+	}
-+
-+	/** A bounded WooCommerce query with a guard before native metadata priming. */
-+	public static function query( array $args ) {
-+		global $wpdb;
-+		self::check_memory();
-+		$marker                       = wp_generate_uuid4();
-+		$args['wc_safe_export_query'] = $marker;
-+		$guard                        = static function ( $posts, $query ) use ( $marker, $args ) {
-+			if ( $marker === $query->get( 'wc_safe_export_query' ) ) {
-+				if ( count( $posts ) > $args['limit'] ) {
-+					throw new RuntimeException( 'A product export query exceeded its bounded batch size.' );
-+				}
-+				self::check_ids( wp_list_pluck( $posts, 'ID' ) );
-+			}
-+			return $posts;
-+		};
-+		$preflight                    = static function ( $request, $query ) use ( $marker, $args ) {
-+			return self::preflight( $request, $query, $marker, $args['limit'] );
-+		};
-+		add_filter( 'posts_request', $preflight, PHP_INT_MAX, 2 );
-+		$found = static function ( $sql, $query ) use ( $marker ) {
-+			return self::found_rows_query( $sql, $query, $marker );
-+		};
-+		$split = static function ( $value, $query ) use ( $marker ) {
-+			return $marker === $query->get( 'wc_safe_export_query' ) ? false : $value;
-+		};
-+		add_filter( 'found_posts_query', $found, PHP_INT_MAX, 2 );
-+		add_filter( 'split_the_query', $split, PHP_INT_MAX, 2 );
-+		add_filter( 'posts_results', $guard, PHP_INT_MIN, 2 );
-+		try {
-+			$products = wc_get_products( $args );
-+			if ( $wpdb->last_error ) {
-+				throw new RuntimeException( 'The product export resource check could not read the database.' );
-+			}
-+			return $products;
-+		} finally {
-+			remove_filter( 'posts_request', $preflight, PHP_INT_MAX );
-+			remove_filter( 'found_posts_query', $found, PHP_INT_MAX );
-+			remove_filter( 'split_the_query', $split, PHP_INT_MAX );
-+			remove_filter( 'posts_results', $guard, PHP_INT_MIN );
-+		}
-+	}
-+
-+	/** Convert I/O warnings to a path-free error and preserve the caller's handler. */
-+	public static function io( callable $operation ) {
-+		set_error_handler(
-+			static function () {
-+				throw new RuntimeException( 'The CSV filesystem operation failed. Check storage permissions and free space.' );
-+			}
-+		);
-+		try {
-+			return $operation();
-+		} finally {
-+			restore_error_handler();
-+		}
-+	}
-+}

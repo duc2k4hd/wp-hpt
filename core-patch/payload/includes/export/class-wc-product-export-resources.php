@@ -146,6 +146,7 @@ final class WC_Product_Export_Resources {
 			$query->set( 'wc_safe_export_found_rows', (int) $total );
 		}
 		self::check_ids( $ids );
+		$query->set( 'wc_safe_export_selected_ids', array_map( 'intval', $ids ) );
 		if ( ! $ids ) {
 			return "SELECT {$wpdb->posts}.* FROM {$wpdb->posts} WHERE 1=0";
 		}

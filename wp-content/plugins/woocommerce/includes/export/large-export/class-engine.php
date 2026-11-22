@@ -48,20 +48,21 @@ final class Engine {
 		}
 
 		$config = array(
-			'version'     => 1,
-			'mode'        => $options['mode'] ?? 'compatibility',
-			'format'      => $options['format'] ?? 'csv',
-			'columns'     => self::strings( $options['columns'] ?? array(), 1000 ),
-			'types'       => self::strings( $options['types'] ?? array(), 100 ),
-			'categories'  => array_map( 'sanitize_title_with_dashes', self::strings( $options['categories'] ?? array(), 500 ) ),
-			'ids'         => array(),
-			'statuses'    => self::strings( $options['statuses'] ?? array(), count( self::STATUSES ) ),
-			'meta'        => ! empty( $options['meta'] ),
-			'bom'         => ! isset( $options['bom'] ) || (bool) $options['bom'],
-			'spreadsheet' => ! isset( $options['spreadsheet'] ) || (bool) $options['spreadsheet'],
-			'excel_view'  => ! empty( $options['excel_view'] ),
-			'estimate'    => ! isset( $options['estimate'] ) || (bool) $options['estimate'],
-			'consistency' => 'live',
+			'version'            => 1,
+			'mode'               => $options['mode'] ?? 'compatibility',
+			'format'             => $options['format'] ?? 'csv',
+			'columns'            => self::strings( $options['columns'] ?? array(), 1000 ),
+			'types'              => self::strings( $options['types'] ?? array(), 100 ),
+			'categories'         => array_map( 'sanitize_title_with_dashes', self::strings( $options['categories'] ?? array(), 500 ) ),
+			'ids'                => array(),
+			'statuses'           => self::strings( $options['statuses'] ?? array(), count( self::STATUSES ) ),
+			'meta'               => ! empty( $options['meta'] ),
+			'bom'                => ! isset( $options['bom'] ) || (bool) $options['bom'],
+			'spreadsheet'        => ! isset( $options['spreadsheet'] ) || (bool) $options['spreadsheet'],
+			'excel_view'         => ! empty( $options['excel_view'] ),
+			'excel_cell_version' => 2,
+			'estimate'           => ! isset( $options['estimate'] ) || (bool) $options['estimate'],
+			'consistency'        => 'live',
 		);
 		if ( $config['excel_view'] ) {
 			$config['bom']         = true;
@@ -194,7 +195,17 @@ final class Engine {
 			}
 			$message = get_class( $error ) === RuntimeException::class && in_array( $error->getMessage(), self::public_errors(), true )
 				? $error->getMessage() : 'A worker unit failed. Check private storage and database availability, then review export compatibility.';
-			$this->store->failure( $job, $message );
+			if ( 'This export used the old shortened Excel format. Start a new export to preserve full HTML.' === $message ) {
+				$this->store->save(
+					$job,
+					array(
+						'status'     => 'failed',
+						'last_error' => $message,
+					)
+				);
+			} else {
+				$this->store->failure( $job, $message );
+			}
 			if ( wp_cache_supports( 'flush_runtime' ) ) {
 				wp_cache_flush_runtime();
 			}
@@ -217,6 +228,7 @@ final class Engine {
 	private static function public_errors(): array {
 		return array(
 			'Product export stopped before exceeding its memory budget. Use a smaller background export batch.',
+			'This export used the old shortened Excel format. Start a new export to preserve full HTML.',
 			'Product export related-data batch exceeds its safe limit.',
 			'The product export resource check could not read the database.',
 			'The product query cannot be preflighted within safe resource limits. Review query filters before exporting.',
@@ -231,6 +243,7 @@ final class Engine {
 			'The product database query failed.',
 			'A product query override does not support bounded background export. Use the legacy exporter.',
 			'The product query returned unexpected IDs. Use the compatibility mode or legacy exporter.',
+			'The product query did not hydrate every selected product. The export was stopped to prevent missing rows.',
 			'The export exceeded the supported number of CSV columns.',
 			'No CSV columns are selected for this export.',
 			'The export schema has changed. Start a new export.',
@@ -266,6 +279,9 @@ final class Engine {
 		}
 		if ( 1 !== ( $config['version'] ?? null ) ) {
 			throw new RuntimeException( 'The export schema has changed. Start a new export.' );
+		}
+		if ( ! empty( $config['excel_view'] ) && 2 !== ( $config['excel_cell_version'] ?? null ) ) {
+			throw new RuntimeException( 'This export used the old shortened Excel format. Start a new export to preserve full HTML.' );
 		}
 		if ( 'finalizing' === $job['status'] ) {
 			$state = $this->files->finalize( $id, $state, $config );
@@ -395,7 +411,13 @@ final class Engine {
 				$state['batch'] = min( 100, $config['batch_max'], $state['resource_batch_max'] ?? $config['batch_max'], max( $batch + 1, (int) ( $batch * 1.2 ) ) );
 			}
 		}
-		$this->store->save( $job, array( 'checkpoint' => $state ) );
+		$this->store->save(
+			$job,
+			array(
+				'checkpoint' => $state,
+				'last_error' => '',
+			)
+		);
 	}
 
 	public function sweep(): void {
@@ -429,10 +451,12 @@ final class Engine {
 	}
 
 	public static function summary( array $job ): array {
-		$state    = $job['checkpoint'];
-		$rate     = $state['rate'] ?? 0;
-		$rows     = $state['rows'] ?? 0;
-		$total    = $state['estimate'] ?? null;
+		$state = $job['checkpoint'];
+		$rate  = $state['rate'] ?? 0;
+		$rows  = $state['rows'] ?? 0;
+		// Old checkpoints estimated every posts-table row, including media/revisions.
+		// Do not display those values as selected product counts or derive an ETA from them.
+		$total    = null;
 		$progress = $total ? min( 99, (int) floor( 100 * $rows / $total ) ) : null;
 		$samples  = $state['unit_samples'] ?? array();
 		sort( $samples, SORT_NUMERIC );
@@ -467,7 +491,7 @@ final class Engine {
 			'max_unit_seconds'            => round( $state['unit_max_seconds'] ?? 0, 3 ),
 			'checksum'                    => $artifact['checksum'] ?? null,
 			'attempts'                    => $job['attempts'],
-			'last_error'                  => $job['last_error'],
+			'last_error'                  => 'completed' === $job['status'] ? '' : $job['last_error'],
 			'logs'                        => $job['logs'] ?? array(),
 		);
 	}

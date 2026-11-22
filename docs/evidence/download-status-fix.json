@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-22",
+  "tests": {
+    "syntax_php_7_4_to_8_4": true,
+    "wordpress_core_4_changed_files": true,
+    "phpcompatibility_7_4_to_8_4": true,
+    "recovery_php_7_4_and_8_4": true,
+    "failure_preserves_checkpoint": true,
+    "ordered_unique_ids_after_retry": true,
+    "missing_hydration_refused": true,
+    "legacy_estimate_hidden": true,
+    "completed_error_cleared": true,
+    "generated_json_url_nonce_valid": true,
+    "generated_url_http_200_byte_exact": true,
+    "generated_url_range_206_byte_exact": true,
+    "http_head_200": true,
+    "concurrent_download_429": true,
+    "legacy_compatibility_keyset_parity": true
+  },
+  "runtime_sha256": {
+    "includes/export/class-wc-product-export-resources.php": "c22b31a47136942e4fefe57a7c506e348a97e21193cbdd688dcf53a9436e1a2f",
+    "includes/export/large-export/class-engine.php": "3ee685d3a6d4ec350eb68e1818f4b5c093d1fc6224506308dfbb21eb005a0a56",
+    "includes/export/large-export/class-reader.php": "0d2c1bdf1325dfb5489a5c8d792b6b79bbfead2fff6933e2e8a80c923a5f3aeb",
+    "includes/export/large-export/class-integration.php": "64617fa65c88eca2ed20ed180f2af019a2a8b87d6e586820a8731c8097aedf70"
+  }
+}

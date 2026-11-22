@@ -475,8 +475,10 @@ final class Integration {
 	public static function summary( array $job ): array {
 		$data                  = Engine::summary( $job );
 		$data['control_nonce'] = wp_create_nonce( 'woocommerce-large-export-' . $job['id'] );
-		$data['download_url']  = 'completed' === $job['status']
-			? wp_nonce_url( admin_url( 'admin-post.php?action=woocommerce_large_export_download&job_id=' . rawurlencode( $job['id'] ) ), 'woocommerce-large-export-download-' . $job['id'] )
+		// JSON URLs are assigned with jQuery.attr(). wp_nonce_url() HTML-escapes
+		// ampersands, making job_id/_wpnonce unreadable by the download endpoint.
+		$data['download_url'] = 'completed' === $job['status']
+			? add_query_arg( '_wpnonce', wp_create_nonce( 'woocommerce-large-export-download-' . $job['id'] ), admin_url( 'admin-post.php?action=woocommerce_large_export_download&job_id=' . rawurlencode( $job['id'] ) ) )
 			: '';
 		return $data;
 	}

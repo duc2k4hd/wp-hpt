@@ -88,8 +88,8 @@ $is_ready = ! $error && defined( 'WC_LARGE_PRODUCT_EXPORT' ) && true === WC_LARG
 				<tr>
 					<th scope="row"><?php esc_html_e( 'CSV options', 'woocommerce' ); ?></th>
 					<td>
-						<label><input type="checkbox" name="excel_view" value="1" checked> <?php esc_html_e( 'Bản xem Excel: bỏ HTML, gộp xuống dòng, cắt mỗi ô tối đa 120 ký tự, UTF-8 BOM.', 'woocommerce' ); ?></label>
-						<p class="description"><?php esc_html_e( 'Bỏ chọn để giữ nội dung đầy đủ khi nhập lại sản phẩm. Bản xem bị cắt dữ liệu. CSV không lưu độ rộng cột; cần chỉnh độ rộng cột trong Excel.', 'woocommerce' ); ?></p>
+						<label><input type="checkbox" name="excel_view" value="1" checked> <?php esc_html_e( 'Giới hạn ô Excel: giữ nguyên HTML và xuống dòng, chỉ cắt phần vượt 32.767 ký tự/ô, UTF-8 BOM.', 'woocommerce' ); ?></label>
+						<p class="description"><?php esc_html_e( 'Bỏ chọn nếu cần xuất không giới hạn độ dài để sao lưu hoặc nhập lại. Nội dung nhiều dòng được đặt trong cùng một ô CSV. CSV không lưu độ rộng cột.', 'woocommerce' ); ?></p>
 						<label><input type="checkbox" name="meta" value="1"> <?php esc_html_e( 'Export custom metadata', 'woocommerce' ); ?></label><br>
 						<label><input type="checkbox" name="spreadsheet" value="1" checked> <?php esc_html_e( 'Protect spreadsheet formula cells', 'woocommerce' ); ?></label><br>
 						<label><input type="checkbox" name="bom" value="1" checked> <?php esc_html_e( 'Include UTF-8 BOM', 'woocommerce' ); ?></label>

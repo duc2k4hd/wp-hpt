@@ -1,0 +1,18 @@
+{
+  "test": "html-cell-limit",
+  "passed": true,
+  "php_versions": [
+    "7.4.33",
+    "8.4.4"
+  ],
+  "html_entities_whitespace_preserved": true,
+  "native_and_background_multiline_csv_round_trip": true,
+  "exact_32767_bmp_characters_preserved": true,
+  "only_overflow_truncated": true,
+  "emoji_surrogates_preserved": true,
+  "formula_prefix_included_in_limit": true,
+  "unlimited_50000_characters_preserved": true,
+  "old_format_resume_refused": true,
+  "cases": 7,
+  "formatter_sha256": "304ef980211b2452759e14fe2a01e1cf2a3204bbd7fab8501439bb80be172d01"
+}
