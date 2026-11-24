@@ -1,0 +1,440 @@
+/* ============================================================
+   HPT Post Import/Export Admin CSS
+   Kế thừa hệ thống style HPT Admin Tools hiện đại
+   ============================================================ */
+
+.hpt-post-ie-admin {
+    --hpt-blue: #0b75b8;
+    --hpt-navy: #102a43;
+    --hpt-ink: #19324a;
+    --hpt-muted: #6b7c93;
+    --hpt-border: #dce6ef;
+    --hpt-surface: #ffffff;
+    max-width: 1180px;
+    margin-right: 28px;
+    color: var(--hpt-ink);
+}
+
+.hpt-post-ie-admin::before {
+    content: "";
+    position: fixed;
+    z-index: -1;
+    inset: 32px 0 0 160px;
+    background: linear-gradient(135deg, #f4f9fc 0%, #eef4f8 48%, #f8fafc 100%);
+}
+
+.hpt-post-ie-admin .hpt-pie-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    margin: 22px 0 18px;
+    padding: 30px 34px;
+    border-radius: 16px;
+    color: #fff;
+    background: linear-gradient(120deg, #103b5b, #0284c7 65%, #06b6d4);
+    box-shadow: 0 16px 34px rgba(16, 42, 67, .16);
+}
+
+.hpt-post-ie-admin .hpt-pie-hero h1 {
+    margin: 8px 0 4px;
+    color: #fff;
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+}
+
+.hpt-post-ie-admin .hpt-pie-hero p {
+    margin: 0;
+    color: rgba(255, 255, 255, .88);
+    font-size: 14px;
+}
+
+.hpt-post-ie-admin .hpt-pie-eyebrow {
+    color: #bbf7d0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .16em;
+}
+
+.hpt-post-ie-admin .hpt-pie-hero-badge {
+    display: grid;
+    min-width: 155px;
+    gap: 4px;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 255, 255, .22);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .1);
+    text-align: center;
+}
+
+.hpt-post-ie-admin .hpt-pie-hero-badge .dashicons {
+    font-size: 26px;
+    height: 26px;
+    width: 26px;
+    margin: 0 auto;
+    color: #7dd3fc;
+}
+
+.hpt-post-ie-admin .hpt-pie-hero-badge strong {
+    color: #fff;
+    font-size: 14px;
+}
+
+.hpt-post-ie-admin .hpt-pie-hero-badge small {
+    color: rgba(255, 255, 255, .75);
+    font-size: 11px;
+}
+
+.hpt-post-ie-admin .hpt-pie-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 18px;
+}
+
+.hpt-post-ie-admin .hpt-pie-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 14px;
+    border: 1px solid var(--hpt-border);
+    border-radius: 999px;
+    color: var(--hpt-navy);
+    background: #fff;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all .2s ease;
+}
+
+.hpt-post-ie-admin .hpt-pie-nav a:hover {
+    border-color: var(--hpt-blue);
+    color: var(--hpt-blue);
+    box-shadow: 0 3px 10px rgba(11, 117, 184, .15);
+    transform: translateY(-1px);
+}
+
+.hpt-post-ie-admin .hpt-pie-nav .dashicons {
+    font-size: 16px;
+}
+
+.hpt-post-ie-admin .hpt-pie-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 18px 0;
+}
+
+.hpt-post-ie-admin .hpt-pie-summary-grid > div {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    align-items: center;
+    column-gap: 8px;
+    padding: 14px 16px;
+    border: 1px solid var(--hpt-border);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .82);
+    box-shadow: 0 4px 12px rgba(16, 42, 67, .04);
+}
+
+.hpt-post-ie-admin .hpt-pie-summary-grid .dashicons {
+    grid-row: span 2;
+    color: var(--hpt-blue);
+    font-size: 24px;
+}
+
+.hpt-post-ie-admin .hpt-pie-summary-grid strong {
+    color: var(--hpt-navy);
+    font-size: 14px;
+}
+
+.hpt-post-ie-admin .hpt-pie-summary-grid small {
+    color: var(--hpt-muted);
+    font-size: 12px;
+}
+
+.hpt-post-ie-admin .hpt-pie-card {
+    margin: 18px 0;
+    overflow: hidden;
+    border: 1px solid var(--hpt-border);
+    border-radius: 14px;
+    background: var(--hpt-surface);
+    box-shadow: 0 8px 24px rgba(16, 42, 67, .06);
+}
+
+.hpt-post-ie-admin .hpt-pie-card-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 22px 26px;
+    border-bottom: 1px solid #eaf0f5;
+    background: linear-gradient(90deg, #fff, #f8fbfd);
+}
+
+.hpt-post-ie-admin .hpt-pie-card-heading h2 {
+    margin: 0 0 4px;
+    color: var(--hpt-navy);
+    font-size: 20px;
+}
+
+.hpt-post-ie-admin .hpt-pie-card-heading p {
+    margin: 0;
+    color: var(--hpt-muted);
+    font-size: 13px;
+}
+
+.hpt-post-ie-admin .hpt-pie-step {
+    display: grid;
+    flex: 0 0 40px;
+    place-items: center;
+    height: 40px;
+    border-radius: 11px;
+    color: #fff;
+    background: var(--hpt-blue);
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.hpt-post-ie-admin .hpt-pie-card-body {
+    padding: 24px 26px;
+}
+
+.hpt-post-ie-admin .hpt-pie-form-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr);
+    gap: 18px;
+    margin-bottom: 20px;
+}
+
+.hpt-post-ie-admin .hpt-pie-form-grid--export {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, .8fr);
+}
+
+.hpt-post-ie-admin .hpt-pie-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    margin: 0;
+    padding: 16px;
+    border: 1px solid var(--hpt-border);
+    border-radius: 10px;
+    background: #fbfdff;
+}
+
+.hpt-post-ie-admin .hpt-pie-field--wide {
+    grid-column: 1 / -1;
+}
+
+.hpt-post-ie-admin .hpt-pie-field > span,
+.hpt-post-ie-admin .hpt-pie-field legend {
+    padding: 0;
+    color: var(--hpt-navy);
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.hpt-post-ie-admin .hpt-pie-field legend {
+    margin-bottom: 4px;
+}
+
+.hpt-post-ie-admin .hpt-pie-field small,
+.hpt-post-ie-admin .hpt-pie-field label small {
+    display: block;
+    color: var(--hpt-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.hpt-post-ie-admin .hpt-pie-field input[type=file],
+.hpt-post-ie-admin .hpt-pie-field select {
+    width: 100%;
+    max-width: none;
+    padding: 9px 12px;
+    border: 1px solid #c8d7e3;
+    border-radius: 7px;
+    background: #fff;
+    font-size: 13px;
+}
+
+.hpt-post-ie-admin .hpt-pie-field label {
+    display: block;
+    margin: 7px 0;
+    font-size: 13px;
+    color: var(--hpt-navy);
+}
+
+.hpt-post-ie-admin .hpt-pie-field input[type=radio],
+.hpt-post-ie-admin .hpt-pie-field input[type=checkbox] {
+    margin-right: 7px;
+}
+
+.hpt-post-ie-admin .hpt-pie-safe-note {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 10px;
+    padding: 9px 12px;
+    border-radius: 7px;
+    color: #0369a1;
+    background: #e0f2fe;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.hpt-post-ie-admin .hpt-pie-checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 14px;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.hpt-post-ie-admin .hpt-pie-checkbox-grid label {
+    margin: 0;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #fff;
+    border: 1px solid #eef2f6;
+    color: #334155;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s ease;
+}
+
+.hpt-post-ie-admin .hpt-pie-checkbox-grid label:hover {
+    background: #f1f5f9;
+}
+
+.hpt-post-ie-admin .hpt-pie-primary {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px !important;
+    padding: 0 20px !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    background: var(--hpt-blue) !important;
+    color: #fff !important;
+    box-shadow: 0 4px 14px rgba(11, 117, 184, .25) !important;
+    text-transform: none !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    cursor: pointer;
+    transition: all .2s ease !important;
+}
+
+.hpt-post-ie-admin .hpt-pie-primary:hover {
+    background: #0284c7 !important;
+    box-shadow: 0 6px 18px rgba(11, 117, 184, .35) !important;
+    transform: translateY(-1px);
+}
+
+.hpt-post-ie-admin .hpt-pie-progress {
+    margin-top: 22px;
+    padding: 18px 22px;
+    border: 1px solid #c8dfea;
+    border-radius: 12px;
+    background: #f7fcff;
+}
+
+.hpt-post-ie-admin .hpt-pie-title {
+    color: var(--hpt-navy);
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.hpt-post-ie-admin .hpt-pie-track {
+    height: 12px;
+    margin: 12px 0 10px;
+    overflow: hidden;
+    border-radius: 99px;
+    background: #e2e8f0;
+}
+
+.hpt-post-ie-admin .hpt-pie-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #0284c7, #10b981);
+    transition: width .3s ease;
+}
+
+.hpt-post-ie-admin .hpt-pie-meta {
+    color: var(--hpt-muted);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.hpt-post-ie-admin .hpt-pie-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 0;
+}
+
+.hpt-post-ie-admin .hpt-pie-actions .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 6px;
+}
+
+.hpt-post-ie-admin .hpt-post-download {
+    background: #10b981 !important;
+    border-color: #10b981 !important;
+    color: #fff !important;
+    font-weight: 600;
+}
+
+.hpt-post-ie-admin .hpt-post-download:hover {
+    background: #059669 !important;
+}
+
+.hpt-post-ie-admin .hpt-pie-errors {
+    max-height: 240px;
+    overflow-y: auto;
+    margin-top: 14px;
+    padding: 12px 16px;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: #fef2f2;
+}
+
+.hpt-post-ie-admin .hpt-pie-errors h4 {
+    margin: 0 0 8px;
+    color: #991b1b;
+    font-size: 13px;
+}
+
+.hpt-post-ie-admin .hpt-pie-errors ul {
+    margin: 0;
+    padding-left: 18px;
+    color: #b91c1c;
+    font-size: 12px;
+}
+
+@media (max-width: 900px) {
+    .hpt-post-ie-admin {
+        margin-right: 14px;
+    }
+    .hpt-post-ie-admin::before {
+        left: 0;
+    }
+    .hpt-post-ie-admin .hpt-pie-hero {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 24px;
+    }
+    .hpt-post-ie-admin .hpt-pie-form-grid,
+    .hpt-post-ie-admin .hpt-pie-form-grid--export,
+    .hpt-post-ie-admin .hpt-pie-summary-grid {
+        grid-template-columns: 1fr;
+    }
+    .hpt-post-ie-admin .hpt-pie-checkbox-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}

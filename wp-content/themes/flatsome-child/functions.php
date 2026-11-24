@@ -10,6 +10,7 @@ include_once 'paths/product-frontend-optimization.php';
 include_once 'paths/media-upload-optimization.php';
 include_once 'paths/brand-admin-tools.php';
 include_once 'paths/product-category-admin-tools.php';
+include_once 'paths/post-import-export-tools.php';
 
 function hpt_is_contact_settings_option_name($option_name) {
     $option_name = (string) $option_name;
