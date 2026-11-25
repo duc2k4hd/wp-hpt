@@ -1,4 +1,127 @@
 <?php
+/* HPT_BULK_REST_BRANDS_BEGIN */
+// The WooCommerce native "brands" field uses product_brand. HPT uses thuong_hieu.
+add_action('rest_api_init', 'hpt_register_product_brand_rest_field');
+function hpt_register_product_brand_rest_field() {
+    if (!taxonomy_exists('thuong_hieu')) {
+        return;
+    }
+    register_rest_field('product', 'hpt_brand_names', array(
+        'get_callback' => 'hpt_rest_get_product_brand_names',
+        'update_callback' => 'hpt_rest_update_product_brand_names',
+        'schema' => array(
+            'description' => 'Tên thương hiệu thuộc taxonomy thuong_hieu của HPT.',
+            'type' => 'array',
+            'items' => array('type' => 'string'),
+            'context' => array('view', 'edit'),
+            'arg_options' => array('validate_callback' => 'hpt_rest_validate_product_brand_names'),
+        ),
+    ));
+    register_rest_field('product', 'hpt_image_caption', array(
+        'get_callback' => 'hpt_rest_get_product_image_caption',
+        'update_callback' => 'hpt_rest_update_product_image_caption',
+        'schema' => array(
+            'description' => 'Caption và ALT dùng chung cho ảnh sản phẩm trong file nhập HPT.',
+            'type' => 'string',
+            'context' => array('view', 'edit'),
+        ),
+    ));
+    register_rest_route('wc/v3', '/hpt/media', array(
+        'methods' => 'GET',
+        'permission_callback' => function () {
+            return current_user_can('edit_products') && current_user_can('upload_files');
+        },
+        'args' => array('src' => array('type' => 'string', 'required' => true)),
+        'callback' => function ($request) {
+            // attachment_url_to_postid only searches local attachment metadata;
+            // it does not fetch the supplied URL.
+            $id = attachment_url_to_postid(esc_url_raw($request['src']));
+            return rest_ensure_response(array('id' => $id, 'src' => $id ? wp_get_attachment_url($id) : ''));
+        },
+    ));
+}
+function hpt_rest_brand_product_id($object) {
+    if (is_object($object) && method_exists($object, 'get_id')) {
+        return (int) $object->get_id();
+    }
+    return is_array($object) ? absint($object['id'] ?? 0) : absint($object->ID ?? 0);
+}
+function hpt_rest_get_product_brand_names($object) {
+    $names = wp_get_object_terms(hpt_rest_brand_product_id($object), 'thuong_hieu', array('fields' => 'names'));
+    return is_wp_error($names) ? array() : $names;
+}
+function hpt_rest_validate_product_brand_names($names) {
+    $taxonomy = get_taxonomy('thuong_hieu');
+    if (!$taxonomy || !current_user_can($taxonomy->cap->assign_terms)) {
+        return new WP_Error('hpt_brand_forbidden', 'Bạn không có quyền gán thương hiệu.', array('status' => 403));
+    }
+    if (!is_array($names) || count($names) > 50) {
+        return new WP_Error('hpt_brand_invalid', 'Thương hiệu phải là danh sách tối đa 50 tên.', array('status' => 400));
+    }
+    foreach ($names as $name) {
+        if (!is_string($name) || '' === trim($name) || strlen($name) > 200 || sanitize_text_field($name) !== $name) {
+            return new WP_Error('hpt_brand_invalid', 'Tên thương hiệu không hợp lệ.', array('status' => 400));
+        }
+        if (!get_term_by('name', $name, 'thuong_hieu') && !get_term_by('slug', sanitize_title($name), 'thuong_hieu') && !current_user_can($taxonomy->cap->manage_terms)) {
+            return new WP_Error('hpt_brand_forbidden', 'Bạn không có quyền tạo thương hiệu mới.', array('status' => 403));
+        }
+    }
+    return true;
+}
+function hpt_rest_update_product_brand_names($names, $object) {
+    $valid = hpt_rest_validate_product_brand_names($names);
+    if (is_wp_error($valid)) {
+        return $valid;
+    }
+    $ids = array();
+    foreach ($names as $name) {
+        $term = get_term_by('name', $name, 'thuong_hieu');
+        if (!$term) {
+            $term = get_term_by('slug', sanitize_title($name), 'thuong_hieu');
+        }
+        if ($term) {
+            $ids[] = (int) $term->term_id;
+            continue;
+        }
+        $created = wp_insert_term($name, 'thuong_hieu');
+        if (is_wp_error($created)) {
+            if ('term_exists' === $created->get_error_code() && $created->get_error_data()) {
+                $ids[] = (int) $created->get_error_data();
+                continue;
+            }
+            return $created;
+        }
+        $ids[] = (int) $created['term_id'];
+    }
+    $saved = wp_set_object_terms(hpt_rest_brand_product_id($object), array_values(array_unique($ids)), 'thuong_hieu', false);
+    return is_wp_error($saved) ? $saved : true;
+}
+function hpt_rest_get_product_image_caption($object) {
+    $product = wc_get_product(hpt_rest_brand_product_id($object));
+    return $product && $product->get_image_id() ? (string) get_post_field('post_excerpt', $product->get_image_id(), 'raw') : '';
+}
+function hpt_rest_update_product_image_caption($caption, $object) {
+    $product = wc_get_product(hpt_rest_brand_product_id($object));
+    if (!$product) {
+        return new WP_Error('hpt_caption_product_missing', 'Không tìm thấy sản phẩm để cập nhật caption.', array('status' => 400));
+    }
+    $ids = array_filter(array_unique(array_merge(array($product->get_image_id()), $product->get_gallery_image_ids())));
+    foreach ($ids as $id) {
+        if (!current_user_can('edit_post', $id)) {
+            return new WP_Error('hpt_caption_forbidden', 'Không có quyền cập nhật ảnh #' . $id, array('status' => 403));
+        }
+    }
+    foreach ($ids as $id) {
+        $saved = wp_update_post(wp_slash(array('ID' => $id, 'post_excerpt' => wp_kses_post($caption))), true);
+        if (is_wp_error($saved)) {
+            return $saved;
+        }
+        update_post_meta($id, '_wp_attachment_image_alt', wp_slash(wp_strip_all_tags($caption)));
+    }
+    return true;
+}
+/* HPT_BULK_REST_BRANDS_END */
+
 add_filter('woocommerce_product_export_column_names', 'add_custom_export_column');
 add_filter( 'woocommerce_product_export_product_default_columns', 'add_custom_export_column' );
 function add_custom_export_column($columns) {
