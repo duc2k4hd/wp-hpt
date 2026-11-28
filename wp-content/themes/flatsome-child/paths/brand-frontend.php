@@ -303,7 +303,7 @@ function hpt_get_grouped_brands_for_directory() {
 }
 
 /**
- * Tự động thêm mục menu "Thương hiệu" ngay sau mục "Shop" trên menu chính (desktop & mobile).
+ * Tự động thêm mục menu "Thương hiệu" ngay sau mục "Shop" trên các menu có chứa "Shop".
  */
 add_filter('wp_nav_menu_objects', function ($items, $args) {
     if (is_admin() || empty($items) || !is_array($items)) {
@@ -311,7 +311,7 @@ add_filter('wp_nav_menu_objects', function ($items, $args) {
     }
 
     $location = isset($args->theme_location) ? (string) $args->theme_location : '';
-    if (!in_array($location, array('primary', 'primary_mobile'), true)) {
+    if (in_array($location, array('footer', 'my_account'), true)) {
         return $items;
     }
 
@@ -333,32 +333,37 @@ add_filter('wp_nav_menu_objects', function ($items, $args) {
 
     $is_current_brands = hpt_is_brands_directory_page() || is_tax('thuong_hieu');
 
-    $brand_item                   = new stdClass();
-    $brand_item->ID               = 990001;
-    $brand_item->db_id            = 990001;
-    $brand_item->title            = 'Thương hiệu';
-    $brand_item->url              = $brands_url;
-    $brand_item->menu_item_parent = 0;
-    $brand_item->type             = 'custom';
-    $brand_item->object           = 'custom';
-    $brand_item->object_id        = 990001;
-    $brand_item->target           = '';
-    $brand_item->attr_title       = 'Thương hiệu';
-    $brand_item->description      = '';
-    $brand_item->xfn              = '';
-    $brand_item->current          = $is_current_brands;
-    $brand_item->current_item_ancestor = false;
-    $brand_item->current_item_parent   = false;
-    $brand_item->classes          = array(
+    $brand_obj                        = new stdClass();
+    $brand_obj->ID                    = 990001;
+    $brand_obj->db_id                 = 990001;
+    $brand_obj->post_type             = 'nav_menu_item';
+    $brand_obj->post_status           = 'publish';
+    $brand_obj->title                 = 'Thương hiệu';
+    $brand_obj->url                   = $brands_url;
+    $brand_obj->menu_item_parent      = 0;
+    $brand_obj->type                  = 'custom';
+    $brand_obj->object                = 'custom';
+    $brand_obj->object_id             = 990001;
+    $brand_obj->target                = '';
+    $brand_obj->attr_title            = 'Thương hiệu';
+    $brand_obj->description           = '';
+    $brand_obj->xfn                   = '';
+    $brand_obj->has_children          = false;
+    $brand_obj->current               = $is_current_brands;
+    $brand_obj->current_item_ancestor = false;
+    $brand_obj->current_item_parent   = false;
+    $brand_obj->classes               = array(
         'menu-item',
         'menu-item-type-custom',
         'menu-item-object-custom',
         'hpt-menu-item-brands',
     );
     if ($is_current_brands) {
-        $brand_item->classes[] = 'current-menu-item';
-        $brand_item->classes[] = 'active';
+        $brand_obj->classes[] = 'current-menu-item';
+        $brand_obj->classes[] = 'active';
     }
+
+    $brand_item = class_exists('WP_Post') ? new WP_Post($brand_obj) : $brand_obj;
 
     $new_items = array();
     $inserted  = false;
@@ -380,9 +385,5 @@ add_filter('wp_nav_menu_objects', function ($items, $args) {
         }
     }
 
-    if (!$inserted) {
-        $new_items[] = $brand_item;
-    }
-
-    return $new_items;
+    return $inserted ? $new_items : $items;
 }, 10, 2);
